@@ -308,15 +308,17 @@ NOT `getWorldPosition()` (which gives three.js world coords).
 
 ---
 
-## Look-At / Dynamic Facing ❌
+## Look-At / Dynamic Facing ⚠️
 
-Opcodes `0x79` / `0x4A` rotate an NPC toward a target during the scene. Not
-implemented in the editor. NPCs are placed at their initial `0xBA` heading and hold
-it for the whole playthrough. When an NPC faces the wrong direction mid-scene, this
-is why.
+Opcodes `0x79` / `0x4A` rotate an NPC toward a target during the scene.
 
-Priority: medium. Implementation would read `0xBA` heading beats from `animTracks`
-and tween `node.rotation.y` on the playhead.
+**Done:** `xi_event.py` parses `0x4A` into typed face beats (`actor`, `target`,
+`yaw`). `xi_compile.py` compiles face tracks to bytecode (`OP_LOOK_AT`). The
+cutscene-author UI exposes a Face sub-track with target and talk-gesture options.
+
+**Missing:** 3D preview playback. `csUpdateActorAnims()` does not process face-kind
+tracks — NPCs still hold their initial `0xBA` heading for the whole playthrough.
+Fix: read face beats from `animTracks` and tween `node.rotation.y` on the playhead.
 
 ---
 
@@ -357,15 +359,19 @@ in a routine points at a `0x2A` section instead of a skeleton animation, it's a 
 
 ## Open Problems Summary
 
+> These are open problems specifically in the **web level editor** (`web/leveleditor/`).
+> Some — particularly weather VFX — may already be solved in the separate `cexi-gl2`
+> renderer (`D:\cexi-gl2`). Check there before starting work on any of these.
+
 | Problem | Status | Priority |
 |---|---|---|
-| Look-at (0x79/0x4A) dynamic facing | ❌ not started | Medium |
+| Look-at (0x79/0x4A) dynamic facing | ⚠️ authored+compiled, preview missing | Medium |
 | Lion's walk path | ⚠️ cause identified, not cracked | Low |
 | Zone weather VFX (rain/snow) | ❌ not started | Low |
 | Prop mesh VFX (0x2A) | ❌ not started | Low |
-| Camera easing curve per mode 0..4 | ⚠️ placeholder linear | Low |
+| Camera easing curve per mode 0..4 | ✅ resolved (`_csEase`, all 5 modes) | — |
 | VFX exact timing (nested routines) | ⚠️ approximate | Low |
-| Zone ambient VFX engine (replace crude emitters) | ⚠️ deferred (risky) | Low |
+| Zone ambient VFX engine (replace crude emitters) | ⚠️ partially done — sky/env-mesh path still legacy | Low |
 
 ---
 
