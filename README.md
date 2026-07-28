@@ -296,6 +296,20 @@ searching the decompressed binary for gear/model formula constants.
 
 ---
 
+## Thank You
+
+This work builds on the research and tooling of many people in the FFXI modding and reverse-engineering community.
+
+- **[XIClient](https://gitlab.com/Aenge/XIClient)** by Aenge — custom FFXI client; an invaluable reference for client behaviour and DAT handling.
+- **[XIM / Ximtool](https://www.ffxiah.com/forum/topic/58758/xim-browser-based-client-simulator)** by Aamace — browser-based FFXI viewer and resource tooling; a major source of format knowledge used throughout these docs.
+- **Shozo** — UE5 research and prototyping that informed the zone and model pipeline work.
+- **[AltanaViewer](https://github.com/Voliathon/AltanaViewer)** by Voliathon — FFXI audio player and format reference.
+- **FFXI Model Viewer** (mogbelt) — early Japanese community tool for viewing FFXI DAT models; one of the first public explorations of the mesh format.
+- **Xeno** (xenonsmurf) — collection of FFXI tools including DAT parsers, Ashita plugins, and the navmesh builder.
+- **[Shining Fantasia](https://gitlab.com/Velyn/ShiningFantasia)** by Velyn — FFXI research and documentation.
+
+---
+
 ## External Source
 
 Reference material from other researchers.
