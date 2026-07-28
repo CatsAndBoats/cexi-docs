@@ -1,0 +1,100 @@
+# Weather IDs → names
+
+The fixed table of FFXI **weather ids** and their in-game names, with the elemental
+association. Events set weather by id (opcodes [`0x72`/`0x77`/`0x78`/`0xAE`](opcodes.md)),
+and the zone weather system / server use the same enum.
+
+> ⚠️ **Trust note.** The **id → name** mapping below is the **standard FFXI weather
+> enum** (the one LandSandBoat's `xi.weather` uses and that BG-wiki documents) — it's
+> well-established, but it is **not shipped as a clean enum in this repo or in our
+> reference sources**, and we have **not** byte-verified it against a client `d_msg`
+> table here (no game install was available). Treat the **names/elements as reliable
+> retail knowledge** and the **"events use exactly this id" claim as not-yet-confirmed**
+> against real event bytes. See [README.md](README.md#source-trust--three-tiers) and
+> "Verification status" below.
+
+---
+
+## The table
+
+20 weather types, paired by element: even id = single strength, odd id = the
+intensified ("double") version of the same element.
+
+| id | dec | in-game name | element |
+|----|-----|--------------|---------|
+| `0x00` | 0 | None / Clear | — |
+| `0x01` | 1 | Sunshine | — |
+| `0x02` | 2 | Clouds | — |
+| `0x03` | 3 | Fog | — |
+| `0x04` | 4 | Hot Spell | Fire |
+| `0x05` | 5 | Heat Wave | Fire (×2) |
+| `0x06` | 6 | Rain | Water |
+| `0x07` | 7 | Squall | Water (×2) |
+| `0x08` | 8 | Dust Storm | Earth |
+| `0x09` | 9 | Sandstorm | Earth (×2) |
+| `0x0A` | 10 | Wind | Wind |
+| `0x0B` | 11 | Gales | Wind (×2) |
+| `0x0C` | 12 | Snow | Ice |
+| `0x0D` | 13 | Blizzards | Ice (×2) |
+| `0x0E` | 14 | Thunder | Lightning |
+| `0x0F` | 15 | Thunderstorms | Lightning (×2) |
+| `0x10` | 16 | Auroras | Light |
+| `0x11` | 17 | Stellar Glare | Light (×2) |
+| `0x12` | 18 | Gloom | Dark |
+| `0x13` | 19 | Darkness | Dark (×2) |
+
+### Mnemonic
+
+- **ids 0–3** are **non-elemental** ambience (Clear, Sunshine, Clouds, Fog).
+- **ids 4–19** are elemental: `element = (id − 4) / 2`, in the standard element order
+  **Fire, Water, Earth, Wind, Ice, Lightning, Light, Dark**. The **odd** id of each pair
+  is the double-strength variant (e.g. `0x06` Rain → `0x07` Squall).
+
+---
+
+## How weather connects to the rest of the system
+
+- **Events / cutscenes** — the event VM can force weather for a scene:
+  [`0x72`](opcodes.md) (load event weather), [`0x77`](opcodes.md) (set a specific time
+  **and** weather), [`0x78`](opcodes.md) (re-enable the timer and reset zone weather),
+  and [`0xAE`](opcodes.md) (a multi-case handler that touches weather among other things).
+  The argument is a weather id — *assumed* to be this enum (see verification status).
+- **Server** — on a LandSandBoat-style server the same enum is `xi.weather`; the server
+  drives a zone's ambient weather rotation and can override it. A custom event that sets
+  weather should agree with the server enum (same client/server contract as events and
+  spell visuals elsewhere in these docs).
+- **Rendering (the *look* of weather)** — separate from the id. Per-zone **weather DAT
+  resources** hold the lighting/fog/sky parameters for each condition. shining fantasia
+  identifies these file regions (`fileId 0x1B78` base + `0x1B79` region table for zones
+  0–99; `0x1B7C`/`0x1B7D` for 100+). The fan client (xiclient) models the runtime as
+  `WeatherResource` → `WeatherCondition` (lighting + fog params) blended by a
+  `WeatherTransition` — useful as a model, but **xiclient is fan-made**, so its class
+  design may be bespoke ([trust note](README.md#source-trust--three-tiers)).
+- **Effect weather** — note the *visual-effect* side flags weather generators separately:
+  a `0x05` generator's `moreFlags` bit `0x20` = "batched (weather)" — see
+  [../fx/effects.md](../fx/effects.md#validated-against-xim-authoritative). That's the
+  particle layer (rain drops, snow), distinct from the weather **id** here.
+
+---
+
+## Verification status
+
+| Claim | Confidence | How to confirm |
+|---|---|---|
+| The 20 id→name→element mapping | **High** (standard retail enum; matches LSB `xi.weather` + BG-wiki) | compare against a LandSandBoat `xi.weather` enum |
+| The names match the client's own strings | **Unverified here** (no game install in this env) | parse the weather-name `d_msg`/EventMessage system table from the client (e.g. the System-Messages region shining fantasia lists at `0x1B77`) and diff against this table |
+| Event opcodes `0x72`/`0x77` take *this exact id* | **Unverified** | decode a real `0x77`/`0x72` instruction's weather byte in an Event DAT and trigger it in-game |
+| Per-zone weather DAT region layout (`0x1B78`+) | **Unverified** (shining fantasia marks them `<Unknown>`) | parse a weather region DAT and correlate ids → lighting params |
+
+**To verify the names with cexi** once a game install is present: we already have a
+working `d_msg` reader (`parse_dmsg` in `src/cexi/zone/xi_list.py`) — point it at the
+client's weather/system string table to dump the names in id order and diff against this
+doc. (A future `cexi event extract` would make this a one-liner.)
+
+---
+
+## Related
+
+- [opcodes.md](opcodes.md) — the event opcodes that set weather (`0x72`/`0x77`/`0x78`/`0xAE`).
+- [dialogue.md](dialogue.md) — the `d_msg` string format the weather names live in.
+- [../fx/effects.md](../fx/effects.md) — the particle side (weather-batched generators).

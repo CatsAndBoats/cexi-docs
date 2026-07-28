@@ -1,0 +1,123 @@
+# AUDIO
+
+Decode FFXI music (`.bgw`) and sound effects (`.spw`) to WAV, browse them with
+real names/categories, dump a categorised catalog for a viewer, and find which
+sounds any effect/zone/mob DAT uses.
+
+ADPCM and PCM decode in **pure Python, byte-for-byte identical to vgmstream** (no
+external tools). ATRAC3 (~36% of music) is routed to `vgmstream-cli` when present.
+
+- Binary format + codec internals: [format.md](format.md)
+- Finding which sounds a DAT uses (`0x3D`): [refs.md](refs.md)
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `uv run cexi audio json --type music [NAME]` | List music tracks with titles, format, duration, loop |
+| `uv run cexi audio export --type music [NAME]` | Decode music to WAV (`exports/audio/music/…`) |
+| `uv run cexi audio json --type sfx [NAME]` | List sound effects with their game category |
+| `uv run cexi audio export --type sfx [NAME]` | Decode sound effects to WAV (`exports/audio/sfx/…`) |
+| `uv run cexi audio decode FILE…` | Decode explicit `.bgw`/`.spw` paths to `.wav` |
+| `uv run cexi audio info FILE` | Dump a file's parsed header |
+| `uv run cexi audio refs <dat>` | List the sounds a DAT references → JSON ([refs.md](refs.md)) |
+| `uv run cexi batch audio_music` | Decode **all** music + write `catalog.json` |
+| `uv run cexi batch audio_sfx` | Decode **all** sound effects + write `catalog.json` |
+
+`NAME` is a substring filter on the filename (e.g. `music10`, `se002`). Use
+`audio search` for the same catalog output with a default result limit.
+
+## Decode one or inspect
+
+```bash
+uv run cexi audio info  "…/sound/win/se/se002/se002060.spw"
+uv run cexi audio decode "…/sound/win/se/se002/se002060.spw" --out out/
+```
+
+`info` prints type, format, channels, sample rate, duration, and loop point.
+
+## List with names
+
+`list` reads each header and annotates it. Music gets titles from `MusicInfo.xml`;
+sound effects get their folder **category** (the game's own grouping):
+
+```
+$ uv run cexi audio json --type music music10 --root sound
+ROOT    FILE              FMT    CH   RATE    DUR LOOP NAME / CATEGORY
+sound   music104.bgw      ADPCM   2  44100   2:19 yes  Yughott Grotto
+sound   music105.bgw      ADPCM   2  44100   2:20 yes  Mhaura
+sound   music106.bgw      ADPCM   2  44100   3:18 -    Voyager (Ferry Music)
+
+$ uv run cexi audio json --type sfx se019 --root sound
+sound   se019001.spw      ADPCM   1  48000   0:03 -    Skillchain Sounds
+```
+
+`--root sound` limits to one sound root (default: all 7).
+
+## Export everything (batch) + catalog
+
+```bash
+uv run cexi batch audio_music          # -> exports/music/<root>/<stem>.wav + catalog.json
+uv run cexi batch audio_sfx            # -> exports/sfx/<root>/seNNN/<stem>.wav + catalog.json
+uv run cexi batch audio_sfx -w 8 --skip-existing --filter se002
+```
+
+- **Parallel** by default (`-w`, scaled to your CPU) — important for the ~12k sfx.
+- **Resumable**: `--skip-existing` skips files already decoded.
+- Output mirrors the source tree under a per-root subfolder so nothing collides.
+- ATRAC3 routes through `vgmstream-cli`; `--native-only` skips it, `--vgmstream
+  PATH` points at a specific binary.
+
+Shared batch options: `-o/--output-dir`, `-w/--workers`, `--skip-existing`,
+`-f/--filter`, `--limit`, `--loops/--no-loops`, `--vgmstream`, `--native-only`,
+`--catalog/--no-catalog`.
+
+### `catalog.json`
+
+Each batch writes a catalog purpose-built for a browser/viewer — files grouped by
+the game's own categories:
+
+- **SFX** → grouped by `seNNN` folder category (Spell Sounds, Combat Sounds,
+  Skillchain, Weapon Skill Effects, Footstep Effects, Monster SFX, …).
+- **Music** → grouped by sound root, each track carrying its title.
+
+```jsonc
+{
+  "kind": "sfx",
+  "count": 11862,
+  "group_count": 60,
+  "formats": { "ADPCM": 9700, "PCM": 1141, "ATRAC3": 1006, "unparseable": 15 },
+  "groups": [
+    {
+      "key": "se019",
+      "label": "Skillchain Sounds",
+      "count": 14,
+      "files": [
+        {
+          "id": 19001, "file": "se019001", "root": "sound",
+          "wav": "sound/se019/se019001.wav",   // relative to the output dir
+          "src": "sound/se019/se019001.spw",
+          "title": null, "category": "Skillchain Sounds",
+          "format": "ADPCM", "channels": 1, "sample_rate": 48000,
+          "duration": 3.312, "looped": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+Every file record includes the relative `.wav` path the batch wrote, so a viewer
+loads audio + metadata together.
+
+## ATRAC3 / vgmstream
+
+ATRAC3 files need `vgmstream-cli`. cexi auto-detects it from, in order:
+`$CEXI_VGMSTREAM`, your `PATH`, then a known install location. Without it, ATRAC3
+files are skipped (clearly reported) and ADPCM/PCM still decode natively.
+
+## See also
+
+- [format.md](format.md) — `.bgw`/`.spw` binary format + ADPCM codec
+- [refs.md](refs.md) — `cexi audio refs`: which sounds a spell/zone/mob DAT uses
+- [../sounds/footsteps.md](../sounds/footsteps.md) — terrain → footstep sound mapping
