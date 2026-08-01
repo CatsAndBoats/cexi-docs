@@ -20,32 +20,36 @@ and the zone weather system / server use the same enum.
 20 weather types, paired by element: even id = single strength, odd id = the
 intensified ("double") version of the same element.
 
-| id | dec | in-game name | element |
-|----|-----|--------------|---------|
-| `0x00` | 0 | None / Clear | — |
-| `0x01` | 1 | Sunshine | — |
-| `0x02` | 2 | Clouds | — |
-| `0x03` | 3 | Fog | — |
-| `0x04` | 4 | Hot Spell | Fire |
-| `0x05` | 5 | Heat Wave | Fire (×2) |
-| `0x06` | 6 | Rain | Water |
-| `0x07` | 7 | Squall | Water (×2) |
-| `0x08` | 8 | Dust Storm | Earth |
-| `0x09` | 9 | Sandstorm | Earth (×2) |
-| `0x0A` | 10 | Wind | Wind |
-| `0x0B` | 11 | Gales | Wind (×2) |
-| `0x0C` | 12 | Snow | Ice |
-| `0x0D` | 13 | Blizzards | Ice (×2) |
-| `0x0E` | 14 | Thunder | Lightning |
-| `0x0F` | 15 | Thunderstorms | Lightning (×2) |
-| `0x10` | 16 | Auroras | Light |
-| `0x11` | 17 | Stellar Glare | Light (×2) |
-| `0x12` | 18 | Gloom | Dark |
-| `0x13` | 19 | Darkness | Dark (×2) |
+| id | dec | in-game name | DAT `weat/` tag | element |
+|----|-----|--------------|-----------------|---------|
+| `0x00` | 0 | None | *(none — not `fine`)* | — |
+| `0x01` | 1 | Sunshine | `suny` | — |
+| `0x02` | 2 | Clouds | `clod` | — |
+| `0x03` | 3 | Fog | `mist` | — |
+| `0x04` | 4 | Hot Spell | `dryw` | Fire |
+| `0x05` | 5 | Heat Wave | `heat` | Fire (×2) |
+| `0x06` | 6 | Rain | `rain` | Water |
+| `0x07` | 7 | Squall | `squl` | Water (×2) |
+| `0x08` | 8 | Dust Storm | `dust` | Earth |
+| `0x09` | 9 | Sandstorm | `sand` | Earth (×2) |
+| `0x0A` | 10 | Wind | `wind` | Wind |
+| `0x0B` | 11 | Gales | `stom` | Wind (×2) |
+| `0x0C` | 12 | Snow | `snow` | Ice |
+| `0x0D` | 13 | Blizzards | `bliz` | Ice (×2) |
+| `0x0E` | 14 | Thunder | `thdr` | Lightning |
+| `0x0F` | 15 | Thunderstorms | `bolt` | Lightning (×2) |
+| `0x10` | 16 | Auroras | `aura` | Light |
+| `0x11` | 17 | Stellar Glare | `ligt` | Light (×2) |
+| `0x12` | 18 | Gloom | `fogd` | Dark |
+| `0x13` | 19 | Darkness | `dark` | Dark (×2) |
+
+**Id 0 vs DAT `fine`:** LSB / server enum id `0` is **None** (no weather / no 4CC tag).
+Zone DATs often still have a `weat/fine/` resource folder — that is a **separate DAT
+tag**, not id 0. Do not map `0 → fine` when bridging server weather to zone folders.
 
 ### Mnemonic
 
-- **ids 0–3** are **non-elemental** ambience (Clear, Sunshine, Clouds, Fog).
+- **ids 0–3** are **non-elemental** ambience (None, Sunshine, Clouds, Fog).
 - **ids 4–19** are elemental: `element = (id − 4) / 2`, in the standard element order
   **Fire, Water, Earth, Wind, Ice, Lightning, Light, Dark**. The **odd** id of each pair
   is the double-strength variant (e.g. `0x06` Rain → `0x07` Squall).
@@ -60,16 +64,16 @@ intensified ("double") version of the same element.
   and [`0xAE`](opcodes.md) (a multi-case handler that touches weather among other things).
   The argument is a weather id — *assumed* to be this enum (see verification status).
 - **Server** — on a LandSandBoat-style server the same enum is `xi.weather`; the server
-  drives a zone's ambient weather rotation and can override it. A custom event that sets
-  weather should agree with the server enum (same client/server contract as events and
-  spell visuals elsewhere in these docs).
-- **Rendering (the *look* of weather)** — separate from the id. Per-zone **weather DAT
-  resources** hold the lighting/fog/sky parameters for each condition. shining fantasia
-  identifies these file regions (`fileId 0x1B78` base + `0x1B79` region table for zones
-  0–99; `0x1B7C`/`0x1B7D` for 100+). The fan client (xiclient) models the runtime as
-  `WeatherResource` → `WeatherCondition` (lighting + fog params) blended by a
-  `WeatherTransition` — useful as a model, but **xiclient is fan-made**, so its class
-  design may be bespoke ([trust note](README.md#source-trust--three-tiers)).
+  drives a zone's ambient weather rotation and can override it. LSB stores a 2160-day
+  packed table and **rolls** normal/common/rare (50/35/15) — that RNG is LSB policy.
+  Retail selection may differ (often modelled as deterministic normal-slot only). A custom
+  event that sets weather should still use this id enum (client/server contract).
+- **Rendering (the *look* of weather)** — separate from the id. Inside each zone DAT,
+  `weat/<tag>/` holds **0x2F environment** records (lighting, fog, procedural sky dome)
+  plus unplaced sky meshes/effects. Global file regions `0x1B78`/`0x1B79` (zones 0–99)
+  and `0x1B7C`/`0x1B7D` (100+) are catalogue stubs in some toolkits — layout still
+  largely unverified here. Fan clients (xiclient/xim lineage) are useful runtime models
+  but not retail proofs ([trust note](README.md#source-trust--three-tiers)).
 - **Effect weather** — note the *visual-effect* side flags weather generators separately:
   a `0x05` generator's `moreFlags` bit `0x20` = "batched (weather)" — see
   [../fx/effects.md](../fx/effects.md#validated-against-xim-authoritative). That's the

@@ -55,52 +55,69 @@ These affect the overall scene lighting independent of textures.
 
 ### Environment section layout (0x2F)
 
-Each 0x2F section contains two independent lighting configs (model + terrain):
+Each 0x2F section holds indoor/outdoor lighting, fog, clear colour, draw distance,
+and (outdoors) the procedural sky-dome rings. Offsets below are relative to the
+section **data start** (after the section header). Two independent LightConfigs
+(model + terrain), then sky fields:
 
 ```
 +0x00  u32   indoors (1=indoor, 0=outdoor)
-+0x0C  BGRA  sun colour (model)
-+0x10  BGRA  moon colour (model)
-+0x14  BGRA  ambient colour (model)
-+0x18  BGRA  fog colour (model)
-+0x1C  f32   fog far distance (model)
++0x0C  RGBA  sun colour (model)
++0x10  RGBA  moon colour (model)
++0x14  RGBA  ambient colour (model)
++0x18  RGBA  fog colour (model)
++0x1C  f32   fog far distance (model)   ← far BEFORE near
 +0x20  f32   fog near distance (model)
 +0x24  f32   diffuse multiplier (model)
-+0x2C  BGRA  sun colour (terrain)
-+0x30  BGRA  moon colour (terrain)
-+0x34  BGRA  ambient colour (terrain)
-+0x38  BGRA  fog colour (terrain)
++0x2C  RGBA  sun colour (terrain)
++0x30  RGBA  moon colour (terrain)
++0x34  RGBA  ambient colour (terrain)
++0x38  RGBA  fog colour (terrain)
 +0x3C  f32   fog far distance (terrain)
 +0x40  f32   fog near distance (terrain)
 +0x44  f32   diffuse multiplier (terrain)
++0x4C  RGBA  clear colour
++0x58  f32   draw distance
++0x5E  u16   sky-dome spoke count
++0x68  f32   sky-dome radius (~2029.5)
++0x6C  8×RGBA  sky-dome ring colours (horizon → zenith)
++0x8C  8×f32   sky-dome ring elevations (0→1)
 ```
 
-BGRA = Blue, Green, Red, Alpha (each 0–255). Not encrypted.
+**Packed colour = RGBA byte order** (R at lowest address, then G, B, A). Top byte is
+often `0x80`. This is **not** the same as per-vertex mesh colour, which is **BGRA**.
+Sanity check: outdoor noon zenith rings should read blue-dominant. Fog far `== 0`
+means fog disabled (discrete; do not treat as a tiny far plane). Not encrypted.
 
 ### Sky and weather
 
-The sky has two independent layers:
+Outdoor sky is mostly **DAT-authored**, not a single engine-only gradient:
 
-1. **Engine gradient** — a background colour gradient rendered by the game engine,
-   controlled by the `zonetype` column in the server's `zone_settings` table.
-   Cannot be modified through DAT files.
+1. **Type-47 sky dome** — procedural gradient rings inside each 0x2F environment
+   record (colours + elevations above). Drawn camera-attached, depth-write off.
+   This is what sets the horizon→zenith colour; edit via 0x2F / `--env-*` / fog flags.
 
-2. **Skybox geometry** — 0x2E mesh sections (clouds, sun, moon, stars) with 0x20
-   textures. Identified by section name prefix. These float around the camera and
-   are NOT placed in the ZoneDef table.
+2. **Skybox / celestial meshes** — unplaced 0x2E sections (clouds, sun, moon, stars)
+   with 0x20 textures, usually under `weat/<weather>/`. Float around the camera; **not**
+   in the ZoneDef placement table. Driven as ambient effects / env shells.
 
-| zonetype | Engine gradient |
-|----------|-----------------|
-| 1–2 | Normal (blue day, dark night) |
-| 3 | Fog |
-| 128 | Dynamis (perpetual dark) |
+3. **`zonetype` (server `zone_settings`)** — still matters for client outdoor/indoor
+   behaviour and some clear/fog modes, but it is **not** “the only sky colour knob”.
+   Prefer editing 0x2F + sky meshes for look; use zonetype when matching server flags
+   (e.g. Dynamis-style dark).
+
+| zonetype | Typical use |
+|----------|-------------|
+| 1–2 | Normal outdoor / town |
+| 3 | Fog-oriented |
+| 128 | Dynamis-style perpetual dark |
 
 #### Skybox section names
 
 | Prefix | Content | Notes |
 |--------|---------|-------|
 | `suny` | Sun/daytime sky | Outdoor zones |
-| `fine` | Fine weather sky | Multiple weather variants |
+| `fine` | Fine weather sky | DAT `weat/` tag (not the same as weather id 0) |
 | `lf01`–`lf04` | Sky gradient layers | Per-weather |
 | `clod`, `cld_` | Clouds | |
 | `mist` | Mist/haze | |
@@ -116,15 +133,15 @@ _SKY_PREFIXES = ("sun", "moon", "star", "clod", "cld", "cloud", "kamo", "suny", 
 **Note:** `suna` (sunakabe) is a wall texture, not sky — be careful with prefix matching.
 Check internal texture names to distinguish.
 
-#### Darkening the sky via textures
+#### Darkening the sky
 
-Crushing sky texture brightness (`--lightness -85`) darkens the skybox geometry
-but does NOT affect the engine gradient. To hide the engine gradient:
-
-- Use `--fog-end 80` with `--fog-tint` to obscure distant sky with coloured fog
-- Set `zonetype = 128` in zone_settings for a black engine gradient
-- Set permanent clouds weather (type 2) — cloud skybox geometry stays visible
-  while fog weather (type 3) clears it
+- Crush sky **texture** brightness (`--lightness -85`) for cloud/sun/moon meshes
+- Tint / shorten fog via `--fog-tint` / `--fog-end` (0x2F fog planes)
+- Edit 0x2F dome ring colours for the procedural backdrop
+- Set `zonetype = 128` when you need that server/client mode, not as a substitute
+  for missing 0x2F data
+- Permanent clouds weather (type 2) keeps cloud geometry up; fog weather (type 3)
+  tends to haze it out
 
 #### Abyssea-style sky swap
 
@@ -135,6 +152,7 @@ To swap skyboxes between zones:
 2. Remove the target zone's sky sections
 3. Insert the donor zone's sky sections at the same position
 4. The mesh references textures by internal name — both must be copied together
+5. Copy the donor `weat/` 0x2F environments if you want matching dome/fog/lighting
 
 ### Weather system
 
@@ -146,12 +164,21 @@ Bit layout: 0 NNNNN CCCCC RRRRR
               normal common rare
 ```
 
-The server rolls: 50% normal, 35% common, 15% rare.
+**LandSandBoat runtime** rolls: 50% normal, 35% common, 15% rare (and may reschedule
+on a short real-time timer). That roll is **server policy**, not a proven retail client
+algorithm. Retail is often modelled as deterministic **normal**-slot weather with a
+fixed multi-year cycle; a packed value of `0` is treated by some tools as “no entry /
+carry forward prior day”, **not** as weather id 0. If you need retail-matching offline
+prediction, do not assume LSB’s RNG matches live retail day-for-day.
 
-**Weather IDs:** 0=None, 1=Sunshine, 2=Clouds, 3=Fog, 4=HotSpell, 5=HeatWave,
-6=Rain, 7=Squall, 8=DustStorm, 9=SandStorm, 10=Wind, 11=Gales, 12=Snow,
-13=Blizzard, 14=Thunder, 15=Thunderstorms, 16=Auroras, 17=StellarGlare,
-18=Gloom, 19=Darkness
+**Weather IDs (LSB / server enum):** 0=None (no DAT tag), 1=Sunshine/`suny`, 2=Clouds/`clod`,
+3=Fog/`mist`, 4=HotSpell/`dryw`, 5=HeatWave/`heat`, 6=Rain/`rain`, 7=Squall/`squl`,
+8=DustStorm/`dust`, 9=SandStorm/`sand`, 10=Wind/`wind`, 11=Gales/`stom`, 12=Snow/`snow`,
+13=Blizzard/`bliz`, 14=Thunder/`thdr`, 15=Thunderstorms/`bolt`, 16=Auroras/`aura`,
+17=StellarGlare/`ligt`, 18=Gloom/`fogd`, 19=Darkness/`dark`.
+
+Zone DATs also use a **`fine`** folder tag under `weat/` — that is a resource name, not
+LSB id 0. See [events/weather.md](../events/weather.md).
 
 **Permanent weather:** Set all 2160 entries to the same packed value.
 
@@ -313,7 +340,8 @@ recolour_zone_dat(output_dat, output_dat, hue=160, tint='#aaddff66', ...)
   in subdir 1 silently encodes as file 41 in subdir 2, pointing to
   the wrong DAT and causing invisible geometry or crashes. Tools must
   auto-bump to the next subdir when a directory reaches 128 files.
-- Sky colour is engine-driven by zonetype, not moddable through DATs
-  (Abyssea red sky requires custom skybox geometry)
+- Outdoor sky colour/lighting is primarily DAT-driven (0x2F dome + `weat/`
+  sky meshes); `zonetype` is a server/client mode flag, not the only sky knob.
+  Abyssea-style looks still need the matching skybox geometry + environments
 - Character select zone name reads from a separate string table
   (`ROM/97/57.DAT` XISTRING format)
