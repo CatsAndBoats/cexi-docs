@@ -23,11 +23,11 @@ walks that flow end-to-end and points at the opcodes that do each job.
    CUTSCENE    0x38 CliEventModeLocal (hide entities / move camera / change movement)
                 │
 4. PLAY        the VM loop: move & face entities (0x1E/0x4A/0x4B/0x36/0x37),
-   THE SCENE   schedule actions/animations (0x1C/0x2D/0x45 + 0x50–0x55 waits),
+   THE SCENE   schedule actions/animations (0x2C/0x2D/0x45 + 0x50–0x55 waits),
                open/close doors (0x4C/0x4D), load extra zones (0x34/0x35),
                print dialogue (0x1D/0x2B/0x48) and wait for dismissal (0x23),
                branch on flags / player choices (0x02/0x3E/0x24/0x25/0x40/0x41),
-               pace with frame delays / yields (0x57/0x26/0x58)
+               pace with wait_time / frame delays / yields (0x1C/0x57/0x26/0x58)
                 │
 5. RELEASE     0x42/0x2E cancel-flags · restore camera/control · 0x43 tell server done ·
                0x21 END EVENT
@@ -45,8 +45,9 @@ walks that flow end-to-end and points at the opcodes that do each job.
   camera control, hide UI elements, move the camera, alter how movement works.
 
 ### Entities (the actors on stage)
-- **`0x1C`** — load a `CMoSchedularTask` on an entity (an *action*/animation); **`0x2D`**
-  schedules a **zone**-level task; **`0x45`** starts a task with two entities.
+- **`0x2C`** — create a `CMoSchedularTask` on an entity (an *action*/animation, 13 bytes);
+  **`0x2D`** schedules a **zone**-level task; **`0x45`** starts a task with two entities.
+  (`0x1C` is **not** a scheduler op — it is wait_time, 3 bytes.)
 - **`0x50`–`0x52`** end those tasks; **`0x53`–`0x55`** **wait** for an entity / zone /
   main task to finish its current action — this is how the script stays in step with an
   animation before moving on.
@@ -75,7 +76,7 @@ gate which menu options are available.
 - **Registers / flags**: `0x03`–`0x11` (get/set/inc/dec, bit ops), `0x12`/`0x13` rand.
 - **Branching**: `0x02` `if`, `0x3E` test-bit branch, `0x44` entity-valid branch,
   `0x1A` jump, `0x1B` break-jump, `0x01` set exec-pointer directly.
-- **Pacing**: `0x57` frame delay, `0x1C` (alt) wait-time, `0x26`/`0x58` yield the VM
+- **Pacing**: `0x1C` wait_time (3 bytes), `0x57` frame delay, `0x26`/`0x58` yield the VM
   (resume next frame). This is what makes a scene play out *over time* rather than
   instantly.
 - **End**: `0x21` ends the event and sets `EventExecEnd`.
@@ -112,16 +113,17 @@ camera through a few mode/trigger opcodes and the path itself lives elsewhere.
 > **EffectRoutine** (`sNNN`) paired with a `0x06` **Route** (`cNNN`) holding the
 > eye/look-at/FOV **keyframe spline** — layout now **fully decoded**: a 32-byte header
 > (`count` at `+0x10`, a smoothing/interp **mode** enum `0..4` at `+0x14`) then `count` ×
-> 48-byte keyframes: **eye** `vec3`, **FOV** (tenths of a degree), **look-at** `vec3`,
-> **roll** (radians), normalized **time**, + 12 zero pad bytes. An engine-knowledgeable
+> 48-byte keyframes: **eye** `vec3`, **focal length** (not degrees; `FOV° = 2·atan2(192, focal)`,
+> default ~350), **look-at** `vec3`, **roll** (radians), normalized **time**, + 12 zero pad
+> bytes. An engine-knowledgeable
 > source from the FFXI **GDTV** community independently described the same — *"the camera
 > timeline VM is block type `0x07`, camera controls block type `0x06`, and the scheduler is
 > the same one effects use"* — matching both our decode and the xim-derived
 > [dat_sections.md](../reference/dat_sections.md) (`0x07` EffectRoutine = the shared effect
 > scheduler). So *where* the camera lives, *which section types* carry it, **and the
 > keyframe layout** are all **settled** (verified across 22.5k Routes / 42.6k keyframes in
-> 14 zones: the two former unknown floats are **FOV** in tenths-of-a-degree — median 600 =
-> 60° — and **roll** in radians; the trailing 12 bytes are always-zero padding). The only
+> 14 zones: the two former unknown floats are **focal length** — `FOV° = 2·atan2(192, focal)`,
+> default ~350 — and **roll** in radians; the trailing 12 bytes are always-zero padding). The only
 > thing still unmapped is the exact **easing curve** each per-Route `mode` value selects —
 > most likely xiclient's 5 `CameraSmoothType` variants (5 names ↔ the 5 observed mode
 > values `0..4`). (These `0x06`/`0x07` **section types** are a different namespace from the
@@ -139,8 +141,9 @@ In **xiclient's model**:
 - **Spline path** (`SplinePath`) builds **three** splines from the control points —
   `EyeTrack`, `LookAtTrack`, and `RollFOVTrack` — and `EvaluatePath(t)` samples eye
   position + look-at + `[FOV, Roll, PointID]` at normalized time `t ∈ [0,1]`. *(Byte-check:
-  the `[FOV, Roll]` pair is exactly the two per-keyframe floats we decoded — FOV in
-  decidegrees, roll in radians.)*
+  the `[FOV, Roll]` pair is exactly the two per-keyframe floats we decoded — the first is a
+  **focal length**, `FOV = 2·atan2(192, focal)`, not an angle; roll in radians. See
+  [camera_scene_ids.md](camera_scene_ids.md) — older "decidegrees" readings were wrong.)*
 - **Smoothing** (`CameraSmoothType`): `Linear`, `Decelerate`, `Accelerate`,
   `DecelerateToMidpointThenAccelerate`, `AccelerateAndDecelerate` (S-curve) — or a custom
   progression curve from a `CMoKeyframe` resource. This is the ease-in/ease-out of the move.
@@ -160,7 +163,8 @@ the event bytecode's role for the camera is to **trigger** a camera move (for N 
 optionally attached to an actor) and to set the camera/UI **mode flags** (`0x38`/`0x46`)
 — it doesn't compute the path inline. The path data itself is stored as a `0x06` **Route**
 spline keyed by a `0x07` **EffectRoutine** in the referenced scene resource (decoded by
-cexi `parse_camera_routes` — see above): each keyframe's **eye**, **FOV** (decidegrees),
+cexi `parse_camera_routes` — see above): each keyframe's **eye**, **focal length**
+(`FOV = 2·atan2(192, focal)`; not decidegrees — that older reading was wrong),
 **look-at**, **roll**, **time** and the per-Route smoothing **mode** are all decoded; the
 only thing *not* yet pinned is the exact easing curve each `mode` value applies. The event
 can also just read the live camera position (`0xAF`).

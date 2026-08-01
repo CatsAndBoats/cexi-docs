@@ -56,33 +56,31 @@ and, when the effect places a mesh or texture, the local position that follows i
 
 ### How `json` labels effects
 
-Labels come from a curated, editable registry, `src/cexi/fx/fx_library.json`.
-Classification signals, best-first:
+Labels come from a curated, editable registry, `src/cexi/fx/fx_library.json`
+(`classify()` in `xi_core.py`):
 
-1. **exact name** (`names`) — e.g. `grid` = "Water surface".
-2. **the mesh it places** (`meshes`) — the strongest *content* signal: anything
-   placing `ligh` is a Light, `rnp#` a Lamp post, `clod` a Cloud, `lows`/`2low`
-   the Sea, `sibj`/`awan`/`suim` the fountain. This works regardless of the
-   effect's own name.
-3. **name prefix** (`prefixes`) — e.g. `lt`* = Light, `pl`* = Point light,
-   `cld`* = Cloud, `sun`/`moon`/`star` = sky.
+1. **Name candidate** — exact `names` hit, else longest matching `prefixes`
+   (prefixes feed name, not a separate final step).
+2. **Mesh / texture candidates** — `meshes` / `textures` maps from what the
+   effect places or references.
+3. **Verified wins** — first verified among mesh → tex → name.
+4. **Else** name → mesh → tex.
 
-A *verified* classification beats a tentative one. Effects with **no mesh
-reference** (pure particle/weather generators like `a###`, `w###`, `gNNN`, point
-lights `pl`) can't be content-classified yet — they need the per-effect parameter
-opcodes decoded (future work). Extend the library freely — add to
-`names`/`meshes`/`prefixes`; no code change needed.
+Effects with **no mesh/texture reference** (pure particle/weather generators)
+can't be content-classified yet. Extend the library freely — add to
+`names`/`meshes`/`textures`/`prefixes`; no code change needed.
 
 ---
 
 ## JSON output
 
-Prints JSON describing every effect — useful for diffing, bulk review, or as a base
-for authoring. Use `--output PATH` to write it to disk.
+Prints JSON to **stdout** by default — useful for diffing, bulk review, or piping.
+Use `--output PATH` to write it to disk (e.g. `exports/fx/…`).
 
 ```sh
 uv run cexi fx json ROM/1/41
-#  -> exports/fx/rom/1/41.json   (317 effects: light:99 prop:74 sky:18 water:16 …)
+#  -> stdout  (317 effects: light:99 prop:74 sky:18 water:16 …)
+uv run cexi fx json ROM/1/41 --output exports/fx/rom_1_41.json
 ```
 
 Each effect entry:
@@ -104,7 +102,7 @@ Each effect entry:
 
 | field | source | meaning |
 |---|---|---|
-| `attach` | attachFlags low 4 bits (data-start `+0x10`) | how it binds — `None` = world-positioned, else actor/sun/moon |
+| `attach` | attachFlags low 4 bits (section-start `+0x10` = data-start `+0x00`) | how it binds — `None` = world-positioned, else actor/sun/moon |
 | `color_rgb` | sec2 `0x16` ColorSetup | particle tint (BGR in bytes) |
 | `scale` | sec2 `0x0F` ScaleInitializer | x,y,z particle size |
 | `draw_distance` | sec1 `0x0A` GeneratorCull | max emit distance (cull range) |
@@ -214,12 +212,13 @@ uv run cexi fx copy ROM/1/41 lb09 --from ROM/0/60 --at funsui --offset 0 -2 0 --
   `y=−7.2`; a positive `y` buries an effect underground. Move things up by going
   *more negative*.
 - Effects are enumerated **sequentially**, so same-DAT copies/native effects
-  spawn. **Cross-DAT spawning is effect-dependent**: ambient zone effects (Castle
-  Zvahl torches `la*`/`lb*`) transplant and render; **boss/ability effects** (e.g.
-  ROM/0/73 dungeon fire `a*`) are trigger-gated by their `0x07` scheduler and do
-  *not* auto-spawn when transplanted (even with deps + `--replace`). Prefer an
-  ambient source. Verified: a Castle Zvahl torch renders as a standalone fire at
-  the Lower Jeuno fountain.
+  spawn. **Cross-DAT transplant works when the full dependency set comes along**
+  (texture `0x20`, SpriteSheetMesh `0x21`, keyframe `0x19`, meshes `0x2E`) —
+  including boss/ability effects. Verified: `a133` from ROM/0/73 (dungeon fire,
+  `autoRun=true`) renders at the Lower Jeuno fountain once `fire(0x21)` is
+  included. Only generators that are genuinely **`autoRun=false`** need
+  `--replace` onto a spawning slot or `fx set --autorun` afterward. Verified:
+  a Castle Zvahl torch also renders as a standalone fire at the fountain.
 - Keeps a `<dat>.base` backup; the DAT grows (rebuilt, all sections preserved).
 
 ---

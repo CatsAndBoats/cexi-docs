@@ -16,7 +16,7 @@ is still at retail size.
 ## What it does
 
 1. Scans all FTABLE/VTABLE pairs (ROM1–ROM10) to find which model slots are already occupied.
-2. Picks a free `modelid` in the safe custom range (15,000–20,000), or validates one you specify with `--modelid`.
+2. Picks a free `modelid` in the safe custom range (15,000–30,000), or validates one you specify with `--modelid`.
 3. Either copies your DAT into `ROM10/1/<n>.DAT` (default), or registers an already-placed file with `--register-existing`.
 4. Patches `FTABLE10.DAT` and `VTABLE10.DAT` with the correct entry for that file.
 5. Writes a SQL patch file to `patches/cexi_monster_inject_<modelid>_<file_id>.sql`.
@@ -124,7 +124,7 @@ uv run cexi entity inject <dat_file> [options]
 
 | Flag | Default | Description |
 |---|---|---|
-| `--modelid N` | auto | Force a specific modelid (must be free, 15000–20000) |
+| `--modelid N` | auto | Force a specific modelid (must be free, 15000–30000) |
 | `--subdir N` | `1` | ROM10 subdir to place the DAT in |
 | `--register-existing` | off | DAT is already inside ROM10 — skip copy, compute dir/file from its path |
 | `--pool-id N` | modelid + 10000 | `mob_pools.poolid` in generated SQL |
@@ -202,4 +202,5 @@ CEXI_TOOLS_DIR  default: D:\cexi-tools  (patches/ and backups/ live here)
 | Last retail monster | 11,241 | 109,480 |
 | Buffer zone | 11,242 – 14,999 | 109,481 – 113,238 |
 | First safe custom slot | **15,000** | **113,239** |
-| Top of expanded range (default) | 20,000 | 118,239 |
+| Top of expanded range (default) | 30,000 | 128,239 |
+| Gear floor (derived) | — | **128,240** (`CUSTOM_GEAR_BASE`) |

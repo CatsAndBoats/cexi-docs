@@ -1,7 +1,8 @@
 # Zone Injection Legacy
 
 `cexi zone inject` is a hidden compatibility command. New distributable zones
-should use `cexi zone new` plus `cexi dats prepare/plan/build`.
+should use `cexi zone new` plus `cexi dats prepare` / `cexi dats build`.
+
 
 Create new zones by cloning existing ones with colour/lighting modifications.
 Registers into FTABLE10 without touching original game files.
@@ -302,9 +303,10 @@ recolour_zone_dat(output_dat, output_dat, hue=160, tint='#aaddff66', ...)
 - FTABLE10/VTABLE10 must be in the game directory (not XIPivot overlay)
 - Zone file IDs (100–6900) fit within the retail FTABLE size (109,701
   entries), so zone injection does NOT require `cexi ftable expand`.
-  Entity model injection DOES — all base FTABLEs must be expanded to
-  118,240 entries for model IDs 15000+ to resolve. Never restore base
-  FTABLEs to original size after expanding.
+  Entity model injection DOES — all base FTABLEs must be expanded
+  (`cexi ftable expand`; default ceiling modelid 30000 → 128,240 entries)
+  for model IDs 15000+ to resolve. Never restore base FTABLEs to original
+  size after expanding.
 - **ROM subdir file limit**: FTABLE entries encode the file index as
   7 bits (0–127). Each ROM10 subdirectory can hold a maximum of 128
   DAT files. Exceeding this causes file index wrap-around — file 169

@@ -9,17 +9,20 @@ a completely separate model_id so the original gear is unaffected.
 
 ## Prerequisites
 
-1. **FTABLE expansion**: `cexi ftable expand` must have been run first
-2. **Gear setup**: `cexi gear setup` (one-time, expands FTABLEs further
-   and copies original armor DATs to ROM10)
-3. **gearpatch addon**: Must be loaded in the Ashita client — the addon
-   patches the gear lookup tables in memory at runtime
+1. **FTABLE expansion**: `cexi ftable expand` (or `cexi ftable expand gear`) —
+   there is **no** `cexi gear setup` command. Expand grows all F/VTABLEs through the
+   custom gear region (windowed layout to `MAX_GEAR_MODELID` 4095, base
+   `CUSTOM_GEAR_BASE` = **128240** at the default entity ceiling).
+2. **Client gear tables**: `cexi ffximain gear-patch` (static DLL patch) and/or the
+   legacy `gearpatch` Ashita addon — so custom model_ids resolve at runtime.
 
 ## Quick start
 
 ```bash
-# One-time setup
-cexi gear setup
+# One-time: grow FTABLE/VTABLE for custom gear (+ entity buffer)
+cexi ftable expand
+# or gear windows only:
+cexi ftable expand gear
 
 # Inject a red Ridill (model 259 = Ridill)
 cexi gear inject HumeMale main 259 --tint "#ff0000" --blend multiply
@@ -52,21 +55,16 @@ overwritten or ignored at runtime.
 
 ### The solution (three parts)
 
-1. **`cexi gear setup`** (run once on the server/client machine):
-   - Expands all FTABLEs from 118,240 to 126,552 entries
-   - Copies 2,520 existing armor G5 DATs from ROM to ROM10
-   - Registers new file_ids in all FTABLE/VTABLE pairs
+> Prefer `cexi ftable expand` + `cexi ffximain gear-patch` + `cexi gear inject`
+> (or `cexi dats build`). There is **no** `cexi gear setup`. Default entity ceiling
+> is **30k** → gear floor **`CUSTOM_GEAR_BASE` = 128240**
+> (`98239 + MAX_ENTITY_MODELID + 1`; raise via `CEXI_MAX_ENTITY_MODELID`).
 
-2. **`cexi gear inject`** (run per custom model):
-   - Recolors a source gear DAT
-   - Places the result in ROM10
-   - Registers the file_id in FTABLE/VTABLE
-   - Assigns and tracks model_ids via state file
-
-3. **`gearpatch` Ashita addon** (loaded at runtime):
-   - Finds gear tables in FFXiMain.dll memory via pattern matching
-   - Patches 72 group entries across all races and slots
-   - Restores originals on unload
+1. **`cexi ftable expand`** / **`expand gear`** (run once): grow all F/VTABLEs through
+   the windowed gear region (`model_id` 0…4095 per race×slot window, base 128240).
+2. **`cexi gear inject`** / **`cexi dats build`**: place custom gear DATs + register file_ids.
+3. **`cexi ffximain gear-patch`** (or the older `gearpatch` Ashita addon): patch
+   FFXiMain.dll gear group tables so the client accepts the new model_ids.
 
 ### Gear table structure (RE)
 
@@ -85,22 +83,29 @@ Each group: `base_file_id` (uint32) + `count` (uint32).
 
 ### File_id allocation
 
-Custom gear file_ids start at 118,240 (above entity model range) to
-avoid collisions with entity models (file_ids 113,239–118,239).
+Custom gear file_ids start at `CUSTOM_GEAR_BASE` = `98239 + MAX_ENTITY_MODELID + 1`
+(default **128,240**) so they sit above the entity band (file_ids
+113,239–128,239 at the 30k ceiling). Live layout is **windowed** up to
+`MAX_GEAR_MODELID` **4095**:
 
-| Slot type | File_id range | Model_id range | Per race |
-|-----------|--------------|----------------|----------|
-| Armor (x5) | 118,240–123,359 | 672–735 | 128 each |
-| Weapons (x2) | 123,440–125,487 | 1,196–1,323 | 128 each |
-| Face | 125,740–125,995 | 32–63 | 32 each |
-| Ranged | 126,040–126,551 | 256–319 | 64 each |
+```
+file_id = CUSTOM_GEAR_BASE + (race_idx * 9 + slot_idx) * window + model_id
+# window = MAX_GEAR_MODELID + 1  (= 4096)
+```
 
-## Custom model_id ranges
+See `src/cexi/gear/xi_inject.py`. Recommend importing custom gear at model_id
+**3000+** (deep buffer inside each window).
 
-| Slot | Range | Capacity per race |
-|------|-------|-------------------|
+## Custom model_id ranges (historical)
+
+> **Historical only.** Early injectors used fixed per-slot bands (64/128-wide)
+> after a one-shot “gear setup” that no longer exists. The live allocator is the
+> 4096-wide windowed layout above — do not treat these as capacity limits.
+
+| Slot | Old band | Old capacity per race |
+|------|----------|----------------------|
 | face | 32–63 | 32 |
-| head | 672–735 | 64 (first 64 are relocated originals) |
+| head | 672–735 | 64 (first 64 relocated originals) |
 | body | 672–735 | 64 |
 | hands | 672–735 | 64 |
 | legs | 672–735 | 64 |
@@ -264,8 +269,6 @@ All 8 races are supported. Each race needs its own injected model:
 ## Limitations
 
 - Gear models are per-race — inject each race separately
-- Custom model_ids are only visible to clients running the gearpatch addon
-- Armor slots have 64 custom models per race (after 64 relocated originals)
-- Weapon slots have 128 custom models per race
-- Face has 32 custom models per race
-- Ranged has 64 custom models per race
+- Custom model_ids need `cexi ffximain gear-patch` and/or the gearpatch addon
+- Live capacity is the windowed layout (`model_id` up to 4095 per race×slot), not
+  the historical 32/64/128 bands above

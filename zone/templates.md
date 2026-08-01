@@ -1,38 +1,38 @@
 # Zone templates (`cexi zone new --template`)
 
-Custom zones are stamped from a **pre-baked template DAT**. There are two kinds:
-
-| Template | Source zone | Root | Sky in-game? |
-|----------|-------------|------|--------------|
-| `indoor` | Altar Room (ROM/0/64) | `d_oz` | no — enclosed room |
-| `desert` | Eastern Altepa Desert (ROM2/0/1) | `f_ri` | yes |
-| `snow`   | Xarcabard (ROM/0/57) | `f_xa` | yes |
-| `jungle` | Yhoator Jungle (ROM2/0/5) | `f_yu` | yes |
-| `fields` | La Theine Plateau (ROM/0/115) | `f_la` | yes |
-| `city`   | Lower Jeuno (ROM/1/41) | `t_ju` | yes |
+Custom zones are stamped from a **template bundle** — a snapshot of a curated
+custom zone, packaged with `cexi zone make-template`:
 
 ```
-cexi zone new --template desert --name "My Desert"      # outdoor, sky renders in-game
-cexi zone new --name "My Room"                          # indoor (default), no sky
+cexi zone make-template 401 --label "Snow Template"     # package zone 401 → prints a bundle id
+cexi zone new --template a3f9c2 --name "My Snow Zone"   # stamp a new zone from that bundle
 ```
 
-The asset DATs live in `web/leveleditor/assets/` (`new.dat` for indoor, `template_<biome>.dat`
-for the rest). The template→source-zone map is `TEMPLATES`/`TEMPLATE_DONOR` in
-[`src/cexi/zone/xi_new.py`](../../src/cexi/zone/xi_new.py).
+`--template` is **required** and takes the bundle's 6-char hex id (printed by
+`make-template`; the editor's New-Zone dropdown lists bundles by label).
+Bundles live under `<workspaces-repo-root>/templates/<id>/` — `zone.dat` plus
+optional `event.dat`/`dialog.dat`/`npc.dat`, `metadata.json`, and a `data.sql`
+DB snapshot. The source must be a **custom zone (id ≥ 400)**; to template an
+original FFXI zone, Duplicate it first, then run `make-template` on the copy.
+`--from-pristine` snapshots the untouched `<dat>.base` backup instead of your
+edited DAT. Implementation:
+[`src/cexi/zone/xi_make_template.py`](../../src/cexi/zone/xi_make_template.py).
 
 ## Why an outdoor base is required for the sky
 
 The retail client renders a zone's sky from data **inside the zone DAT** (the `0x2F` env +
 sky meshes under the `weat/` directory subtree) **but only treats the zone as outdoor when it
-was built from a real outdoor zone** — the indoor Altar husk (`d_oz`, no top-level `0x36`
-ZoneInteractions) is treated as indoor and the sky is skipped, even though the env bytes are
-identical to a working zone. Splicing a sky into the indoor template (`--sky`) makes it show
-in the *editor* (which draws sky by mesh name) but **not in-game**. So outdoor zones must start
-from an actual outdoor zone. See [format.md](format.md) and the memory note `sky-not-visible-ingame`.
+was built from a real outdoor zone** — an indoor husk like the Altar Room (`d_oz`, no top-level
+`0x36` ZoneInteractions) is treated as indoor and the sky is skipped, even though the env bytes
+are identical to a working zone. Splicing a sky into an indoor-sourced template (`--sky`) makes
+it show in the *editor* (which draws sky by mesh name) but **not in-game**. So outdoor zones
+must start from an actual outdoor zone — `make-template` warns when the source has no `weat`
+sky / no `0x36`. See [format.md](format.md) and the memory note `sky-not-visible-ingame`.
 
-## Building the templates — `research/build_biome_templates.py`
+## Building a flat biome base — `research/build_biome_templates.py`
 
-Each outdoor template is a real zone blanked to a flat floor while keeping its sky + outdoor
+The original flat-floor biome bases (desert/snow/jungle/fields/city) were built by this
+research script: a real zone blanked to a flat floor while keeping its sky + outdoor
 structure. The recipe (proven; do NOT reorder steps 4/5):
 
 1. **copy** the source zone DAT
@@ -52,31 +52,35 @@ structure. The recipe (proven; do NOT reorder steps 4/5):
    `0x2E` sections (not via placements), so blanking placements does NOT hide it; only removing
    the sections does. KEEP the `weat` sky + the `0x36` outdoor marker + the floor.
 
-Every build is **offline-validated** before shipping: quadtree leaves in-bounds, collision
+Every build is **offline-validated**: quadtree leaves in-bounds, collision
 `idxCount == node_count`, cull transforms preserved (≈ node_count), and root/`weat`/sky/floor
 present. A build that fails any check is reported FAIL and not used.
 
-### Add a new biome
+### Add a new biome base
 
-Add a row to `BIOMES` in `research/build_biome_templates.py` (`biome: (ROM-path, donor_zoneid)`),
-re-run it, then add the same key to `TEMPLATES` + `TEMPLATE_DONOR` in `xi_new.py`. The source must
-be a real outdoor/town zone with a `weat/` subtree (verify: `f_`/`t_` root, sky meshes under weat).
+Add a row to `BIOMES` in `research/build_biome_templates.py` (`biome: (ROM-path, donor_zoneid)`)
+and re-run it. The source must be a real outdoor/town zone with a `weat/` subtree (verify:
+`f_`/`t_` root, sky meshes under weat). Install the result as a custom zone, then package it
+with `cexi zone make-template` to get a bundle id.
 
 ## Server side — the DB migration
 
 `cexi zone new` writes `zone-migration.sql` to the workspace and (by default) **auto-applies it**
-to the dev DB. It **clones the template's donor zone's** `zone_settings` + `zone_weather` rows
-(overriding id/name/ip/port), so the custom zone inherits a known-good outdoor config + weather
-rotation — which the server must send for the dynamic sky/weather to run. See
-[import-json.md](import-json.md) and the DB creds in
-[`xi_config.py`](../../src/cexi/xi_config.py) (`CEXI_DB_*`, `CEXI_DB_AUTOAPPLY`). **The map server
-must be restarted** to load a newly-added zone's weather config.
+to the dev DB. The SQL comes from the bundle's `data.sql` snapshot (the source zone's
+`zone_settings` + `zone_weather` rows, with id/name/ip/port overridden); when the bundle has no
+`data.sql`, it falls back to cloning those rows live from the template's source zone. Either
+way the custom zone inherits a known-good outdoor config + weather rotation — which the server
+must send for the dynamic sky/weather to run. See [import-json.md](import-json.md) and the DB
+creds in [`xi_config.py`](../../src/cexi/xi_config.py) (`CEXI_DB_*`, `CEXI_DB_AUTOAPPLY`).
+**The map server must be restarted** to load a newly-added zone's weather config.
 
 ## Known limitations
 
-- **Collision** is a flat floor at origin; the source zone's terrain is invisible but removed, so
-  walking off the floor edge has no ground. Add your own collision via the editor.
-- **Water/sea** from the source zone is intentionally dropped (it references resources tied to that
-  zone's layout) — add water as its own placeable feature, not baked into the base.
+- **Collision** is whatever the source zone had. Templates made from the flat biome bases have
+  only a flat floor at origin — the source terrain is invisible *and* removed, so walking off
+  the floor edge has no ground. Add your own collision via the editor.
+- **Water/sea** from a biome base's source zone is intentionally dropped (it references
+  resources tied to that zone's layout) — add water as its own placeable feature, not baked
+  into the base.
 - **Spawn point** is server-side (not in the DAT); set it via the server (GM `!pos`, or a zone
   script's onZoneIn). `zone_settings` has no x/y/z column.

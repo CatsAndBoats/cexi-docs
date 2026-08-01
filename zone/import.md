@@ -29,8 +29,14 @@ cexi zone import ROM/1/41 [model.glb] [--prune] [--rebuild] [--placement MESH] [
 ```
 
 - `model` optional — defaults to the newest `.glb` in `exports/zone/<rom>/`.
-- A `<dat>.base` pristine backup is created on first run and used as the source on
-  **every** run (edits are always recomputed from base, never stacked).
+- A `<dat>.base` pristine backup is created on first edit.
+- **Stacking rules (not uniform):**
+  - **GLB import** (placements + mesh-merge + `--prune`/`--rebuild`/`--placement`)
+    always starts from `<dat>.base` — edits are recomputed from pristine, not stacked.
+  - **`--add-collision` alone** layers on the *current* DAT (re-running appends again).
+  - **Combined** (`zone import model.glb --add-collision blocker.obj`): collision runs
+    **after** the GLB path, so one-shot works (GLB would otherwise wipe earlier
+    collision by resetting from `.base`).
 - Output line reports: `Placements: N of M updated`, plus `deleted`/`added`/
   `Rebuilt`/`Mesh-merged` counts when those apply.
 
@@ -121,9 +127,9 @@ group to edit them. The FBX exporter sometimes kicks mirrored objects (e.g.
 
 ## 3. Mesh-merge (grow an existing object's `0x2E` mesh)
 
-Adding a *new placement* does not render (the engine ignores brand-new objects —
-see "Dead end" below). The working alternative: **merge new/edited geometry into
-an object that already renders.** Automatic in `cexi zone import` (no flag).
+To add a *brand-new* mesh + placement, use [`cexi object import`](../object/import.md).
+To grow geometry on an object that already renders: **merge new/edited geometry
+into its existing `0x2E`.** Automatic in `cexi zone import` (no flag).
 
 ### Detection
 
@@ -176,8 +182,10 @@ all sections preserved, parse to EOF).
 ### Limitations
 
 Assumes the merged object is **single-placement** (gather collects all glb nodes
-matching the mesh name). No collision for merged geometry (visual only —
-walk-through; collision is likely server-side, deferred).
+matching the mesh name). Mesh-merge is **visual only** — it does not update the
+client collision MZB inside `0x1C`. Author walk/block geometry separately with
+`--add-collision` ([collision.md](collision.md)); bake the server navmesh from
+that soup ([navmesh.md](navmesh.md)).
 
 ---
 
@@ -225,14 +233,12 @@ only positioned by their effect. (~64 orphan meshes in ROM/1/41.)
 
 ## Not done / future
 
-- **Add a brand-new placement: dead end (so far).** Growing `0x1C` + relocating
-  every internal offset (object records, space-tree leaves, culling tables, the
-  full collision mesh chain + transform array, grid cells) loads without crashing,
-  and the new object resolves by name and registers in a visible space-tree leaf —
-  **but the engine still renders only the original set and ignores the added
-  object.** Cause unknown. Mesh-merge (§3) is the working substitute.
-  (`src/cexi/zone/xi_zonedef.py` `add_placements`, `src/cexi/zone/xi_add_object.py`.)
+- **Brand-new placements work** via [`cexi object import`](../object/import.md)
+  (registers the index across space-tree, culling tables, and collision
+  transforms). Prefer that over hand-growing `0x1C`. Mesh-merge (§3) remains the
+  path for *editing geometry* of an object that already exists.
 - **Vertex edits with original topology** (`--rebuild`) work but coord-correctness
   not deeply verified — check in a viewer.
 - **New effect types**, effect params decode, effect duplication into the CLI.
-- **Collision** — likely server-side (LSB + `thirdparty/navmesh builder`).
+- **Collision** is client-side MZB in `0x1C` — see [collision.md](collision.md);
+  server navmesh is baked from it ([navmesh.md](navmesh.md)).

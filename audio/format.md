@@ -1,7 +1,8 @@
 # FFXI Audio Binary Format (`.bgw` / `.spw`)
 
 Reverse-engineered while building `cexi audio`, verified **byte-for-byte against
-vgmstream** on ~150 sampled files plus every block-size anomaly file. Parsing
+vgmstream** on ~150 sampled files plus every block-size anomaly file (a manual
+one-off run — there is no in-tree regression harness). Parsing
 reference: the Windower pol-utils codec (`PlayOnline.Core/{AudioFile,
 AudioFileStream,ADPCMCodec}.cs`) and the `xim` client reimplementation
 (`SoundEffectSection.kt`).
@@ -41,6 +42,11 @@ int32  unknown4        # SeWave only
 
 `sample_format`: `0` = ADPCM, `1` = PCM, `3` = ATRAC3.
 
+Because the SeWave marker is 4 bytes shorter, the trailing u8 quartet
+(`unknown2, unknown3, channels, block_size`) sits at different *absolute* offsets
+per container — bytes `0x28`–`0x2B` for SeWave vs `0x2C`–`0x2F` for BGMStream
+(`parse_header` reads them at `body + 0x18`).
+
 ### Gotcha 1 — the sample rate is a sum of two signed ints
 
 `sample_rate = sample_rate_high + sample_rate_low`, **as signed `int32`s**. The two
@@ -59,8 +65,10 @@ frame_size  = body_bytes / (sample_blocks * channels)   # bytes per block per ch
 block_samples = (frame_size - 1) * 2                     # decoded samples per block per channel
 ```
 
-This always divides evenly for valid ADPCM, so cexi derives it for every file and
-only falls back to the header byte when the geometry isn't clean. Examples:
+This always divides evenly for valid ADPCM. cexi's derivation is gated to
+**ADPCM only** (PCM/ATRAC3 always use the header byte) and additionally requires
+the division to be clean and `frame_size >= 2`; otherwise it falls back to the
+header byte. Examples:
 
 | File | header `block_size` | derived `frame_size` | samples/block |
 |------|--------------------|----------------------|---------------|
@@ -125,10 +133,17 @@ file   = id           -> se{id:06d}         # 2060 -> se002060
 => sound/win/se/se002/se002060.spw
 ```
 
+This se-scheme is **sfx-only**. Music is addressed by its own id as
+`<root>/win/music/data/music{id:03d}.bgw` (see `locate_music` in `xi_core.py`).
+
 ## WAV output
 
 Hand-rolled RIFF/WAVE, PCM 16-bit. For looped audio a `smpl` loop chunk is appended
 (`loop_start_frame = loop_start * block_samples`), default on (`--no-loops` to omit).
+
+**Caution:** for **PCM** files `block_samples` comes from the unreliable header
+byte (the geometry derivation is ADPCM-only), so the product is not meaningful —
+harmless today only because the encoder always writes `loop_start` = 0 or −1.
 
 ## On-disk layout
 

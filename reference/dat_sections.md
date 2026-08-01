@@ -63,7 +63,8 @@ A **cutscene camera** is built from these same block-types, **byte-verified in c
 cutscene's referenced scene resource): each shot pairs a `0x07` **EffectRoutine** (`sNNN`,
 the camera timeline) with a `0x06` **Route** (`cNNN`, the eye/look-at/FOV keyframe spline).
 Each Route = a 32-byte header (`count`, plus a smoothing/interp **mode** enum `0..4` at
-`+0x14`) then `count` × 48-byte keyframes: eye `vec3`, FOV (tenths of a degree), look-at
+`+0x14`) then `count` × 48-byte keyframes: eye `vec3`, FOV as **focal length**
+(`FOV° = 2·atan2(192, focal)`, default ~350 — not tenths-of-a-degree), look-at
 `vec3`, roll (radians), normalized time, + 12 zero pad bytes.
 An engine-knowledgeable source (FFXI **GDTV** community) independently described the same —
 *"the camera timeline is block type `0x07`, camera controls block type `0x06`, and the

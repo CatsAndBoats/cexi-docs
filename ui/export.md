@@ -1,4 +1,4 @@
-# cexi ui export
+# cexi ui tex export
 
 Extracts DXT1 / DXT3 / DXT5 textures from FFXI UI container DAT files
 (`lobb` / `menu` format) and writes them as standard `.dds` files.
@@ -8,19 +8,20 @@ Extracts DXT1 / DXT3 / DXT5 textures from FFXI UI container DAT files
 ## Usage
 
 ```
-uv run cexi ui export <DAT_FILE> [OPTIONS]
+uv run cexi ui tex export <DAT_FILE> [OPTIONS]
 ```
 
-Shortcut wrapper:
+Shortcuts (registered as `sx` / `si` only — there is no `simple-extract` /
+`simple-import` long name):
 
 ```
 uv run cexi ui tex sx <DAT_FILE>
 uv run cexi ui tex si <DAT_FILE>
 ```
 
-`simple-extract` / `sx` derive the export folder automatically from the DAT path,
-extract the `.dds` files there, and then convert all extracted DDS files to PNG in
-the same folder.
+`sx` derives the export folder automatically from the DAT path, extracts the
+`.dds` files there, and then converts all extracted DDS files to PNG in the same
+folder.
 
 Example:
 
@@ -39,29 +40,29 @@ Example:
 
 ```bash
 # list textures (no extraction)
-uv run cexi ui export ROM/119/50.DAT --list
-uv run cexi ui export ROM/119/51.DAT --list
+uv run cexi ui tex export ROM/119/50.DAT --list
+uv run cexi ui tex export ROM/119/51.DAT --list
 
 # extract all textures to exports/ui/50/
-uv run cexi ui export ROM/119/50.DAT
+uv run cexi ui tex export ROM/119/50.DAT
 
 # extract with JSON manifest
-uv run cexi ui export ROM/119/51.DAT --json
+uv run cexi ui tex export ROM/119/51.DAT --json
 
 # extract to a custom directory
-uv run cexi ui export ROM/0/2.DAT --output-dir exports/ui/lobby
+uv run cexi ui tex export ROM/0/2.DAT --output-dir exports/ui/lobby
 
 # simplified extract + DDS->PNG flow
-uv run cexi ui sx ROM/0/1.DAT
-uv run cexi ui sx ROM/119/50.DAT
+uv run cexi ui tex sx ROM/0/1.DAT
+uv run cexi ui tex sx ROM/119/50.DAT
 ```
 
 Paths are relative to the FFXI directory (`FFXI_DIR` in config).
 
-If you plan to edit textures as PNGs, the shortcut wrapper is the simplest flow:
+If you plan to edit textures as PNGs, the shortcut is the simplest flow:
 
 ```bash
-uv run cexi ui sx ROM/0/1.DAT
+uv run cexi ui tex sx ROM/0/1.DAT
 ```
 
 That produces a working folder like `exports/ui/0/1` containing both the original
@@ -77,12 +78,12 @@ screen, stored in `ROM/119/50.DAT` (US / English client).
 
 ```bash
 # 1. export — writes DDS + PNG into exports/ui/119/50
-uv run cexi ui sx ROM/119/50.DAT
+uv run cexi ui tex sx ROM/119/50.DAT
 
 # 2. edit exports/ui/119/50/titlwin.png in Photoshop, re-save as PNG
 
 # 3. import — rebuilds PNG -> DDS and writes it back into the DAT
-uv run cexi ui si ROM/119/50.DAT
+uv run cexi ui tex si ROM/119/50.DAT
 ```
 
 Notes:
@@ -131,9 +132,9 @@ set FFXI_DIR=D:\cexi\catseyexi-client\Ashita\polplugins\DATs\catseyexi
 $env:FFXI_DIR = "D:\cexi\catseyexi-client\Ashita\polplugins\DATs\catseyexi"
 ```
 ```bash
-uv run cexi ui sx ROM/119/50.DAT      # reads the override DAT -> exports/ui/119/50
+uv run cexi ui tex sx ROM/119/50.DAT      # reads the override DAT -> exports/ui/119/50
 # edit exports/ui/119/50/titlwin.png
-uv run cexi ui si ROM/119/50.DAT      # writes back into the override DAT, in place
+uv run cexi ui tex si ROM/119/50.DAT      # writes back into the override DAT, in place
 ```
 
 Notes:

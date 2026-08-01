@@ -48,7 +48,7 @@ uv run cexi gear export Galka main 1 --output /tmp/galka_sword
 ## Output files
 
 ```
-exports/gear/HumeMale/body/0/
+exports/gear/rom/<sub>/<file>/     # e.g. mirrors the resolved DAT path
   *.glb              ← glTF — Blender, three.js, etc.
   *.fbx              ← texture-embedded FBX for C4D / Maya  (--fbx only)
   *.png              ← texture sheets (also embedded in the GLB)

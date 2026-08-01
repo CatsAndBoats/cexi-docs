@@ -16,7 +16,7 @@ Use `cexi dats` when the result should be rebuilt from Git and published:
 
 ```bash
 uv run cexi dats prepare workspaces/foo/zone-changes.json dats/update.json --target ROM10/2/0.DAT
-uv run cexi dats plan dats/update.json
+uv run cexi dats build dats/update.json --dry-run
 uv run cexi dats build dats/update.json
 ```
 
@@ -96,13 +96,14 @@ detectable anywhere (e.g. weapons), it asks once, like before.
 
 ### Mounts
 
-Source DAT + destination DAT + mount id (recommend `39–63`, menu-visible) + optional key
-item (EN/JP name & description). Reuses the mount record machinery (model + name/help +
-key-item d_msg + server snippet).
+Source DAT + destination DAT + mount id (recommend `39–62`, menu-visible; id 63 is
+occupied) + optional key item (EN/JP name & description). Reuses the mount record
+machinery (model + name/help + key-item d_msg + server snippet).
 
 ### Entity
 
-Source DAT + destination DAT + model id (recommend `20000+`;
+Source DAT + destination DAT + model id (recommend `15000–30000`; dats default often
+starts mid-band around `20000` as a buffer — floor is `MODEL_SAFE_START` 15000;
 `file_id = model_id + 98239`).
 
 ### NPC (costume — bake from race + gear + weapons)
@@ -128,29 +129,27 @@ See [../entity/npc-look.md](../entity/npc-look.md).
 
 ## Building (`cexi dats build`)
 
-A build writes the DATs and patches their file_ids **directly into one or more live
-targets** — the CatsEyeXI pivot overlay (`FFXI_PIVOT_DIR`, default), the base install
-(`FFXI_DIR`), and/or the HD overlay (`FFXI_HD_DIR`). There is no intermediate pack.
+A build writes DATs and patches their file_ids **directly into the base install
+(`FFXI_DIR`)**. There is no multi-target `--target pivot,hd` switch — the base install is
+the only place custom gear/entity file_ids can register (XIPivot cannot overlay the root
+`FTABLE`). After a successful pack build, if `FFXI_PIVOT_DIR` is set, the custom region of
+the pivot's tables is updated via `sync_pivot_from_base()` so sizes stay uniform and the
+new file_ids resolve through the overlay.
 
 ```bash
-uv run cexi dats build --project gyokko_mask                    # into FFXI_PIVOT_DIR (default)
-uv run cexi dats build --project gyokko_mask --target dir       # into FFXI_DIR instead
-uv run cexi dats build --project gyokko_mask --target pivot,hd  # into both (comma-separated)
-uv run cexi dats build --project gyokko_mask --dry-run          # preview only, writes nothing
+uv run cexi dats build --project gyokko_mask            # into FFXI_DIR, then sync pivot tables
+uv run cexi dats build --project gyokko_mask --dry-run  # preview only, writes nothing
+uv run cexi dats changelog --project gyokko_mask        # table of recorded results
 ```
 
-A target with **no FTABLE** (the HD overlay is one) is a **DAT-only** drop — the DAT is
-placed there but the file_id is registered in another target's tables (XIPivot resolves the
-file_id via whichever overlay has the tables, then finds the DAT in the stack). At least one
-chosen target must have tables.
-
-- The target's `FTABLE`/`VTABLE` **must already exist and be expanded** for the custom
+- The base install's `FTABLE`/`VTABLE` **must already exist and be expanded** for the custom
   models you're placing — run `cexi ftable expand entity` / `cexi ftable expand gear` on
-  that install first. The wizard's opening step reports each target's expansion status.
+  that install first. The wizard's opening step reports expansion status.
 - Each table is backed up once to `<name>.base` before the first patch (recoverable via
   `cexi ftable reset`).
 - **`--dry-run`** prints the full per-DAT placement plan (every race for gear) and any
-  file_id collisions, without touching disk.
+  file_id collisions, without touching disk. There is **no** separate `cexi dats plan`
+  command — use `--dry-run` or `cexi dats changelog`.
 
 The free-block finder for gear scans both `FFXI_DIR` and `FFXI_PIVOT_DIR`, so deleting a
 project's DATs from the live install frees those slots again.
@@ -160,54 +159,42 @@ project's DATs from the live install frees those slots again.
 ## Packaging for distribution (`cexi dats package`)
 
 ```bash
-uv run cexi dats package gyokko_mask               # prompts which target to read from
-uv run cexi dats package gyokko_mask --from pivot  # or name it (dir | pivot | hd)
+uv run cexi dats package gyokko_mask               # read from FFXI_DIR (default --from dir)
+uv run cexi dats package gyokko_mask --from pivot  # or pivot | hd
 ```
 
-You pick **one** source target (the prompt tags whichever the project was built into). Each
-build records the targets it wrote to on every action's `result.targets`, so the manifest
-tracks where a project has been deployed.
+With no project argument, lists `dats/*.json` to pick from. Reads from **one** source
+(`--from dir|pivot|hd`, default `dir` — where builds land). Zips everything needed to run
+one project as an overlay:
 
-Zips, from the chosen target, everything needed to run one project as an overlay:
-
-- every DAT the project's actions placed (read from each action's inline `result` — all
+- every DAT the project's actions placed (from each action's inline `result` — all
   per-race DATs for gear), plus the mount name/help/key-item string DATs for mount actions,
 - the full `FTABLE`/`VTABLE` set (so the new file_ids resolve).
 
-Files are laid out ROM-relative inside the zip, so it drops straight into an XIPivot overlay
-folder. Build the project into that target first.
+Files are laid out ROM-relative inside the zip (XIPivot-ready). Build the project first.
 
-## Package layout
+## Package layout vs live target build
+
+Two different trees — don't confuse them:
+
+| Path | Role |
+|---|---|
+| **Live target** (`FFXI_DIR`) | Where `dats build` places mesh/entity/gear/mount DATs + table patches. Then `sync_pivot_from_base()` updates pivot overlay tables when configured. |
+| `dats/resources/` | Source tree you commit: GLBs, PNGs, `zone-changes.json`, imported JSON, mount DATs, etc. |
+| `dats/catseyexi/` + `dats/ffxi-hd/` | **Zone actions only** — standard/HD package output trees (not the live gear/entity target). |
+| `dats/packages/` | Zip output from `cexi dats package`. |
+| `dats/<project>.json` | Per-project manifests (`dats new` / `prepare`). |
 
 ```text
 dats/
-  update.json
-  locks.json
-  resources/
-    zone/
-    mount/
-    gear/
-    mesh/
-    anim/
-    audio/
-    tex/
-    ui/
-    event/
-  catseyexi/
-    FTABLE.DAT
-    VTABLE.DAT
-    ROM10/
-      FTABLE10.DAT
-      VTABLE10.DAT
-      ...
-  ffxi-hd/
-    ROM/
-    ROM10/
+  update.json                 # default manifest (or dats/<project>.json)
+  resources/                  # committed sources
+  catseyexi/                  # zone standard package tree
+  ffxi-hd/                    # zone HD package tree
+  packages/                   # distributable zips
+  server/                     # emitted server snippets (e.g. mounts)
 ```
 
-- `dats/resources` is the source tree you commit: GLBs, PNGs, `zone-changes.json`, imported JSON, mount DATs, etc.
-- `dats/catseyexi` is the standard DAT output tree.
-- `dats/ffxi-hd` is the HD DAT output tree.
 - **Results are recorded inline** on each action (`action["result"]` = model_id → file_id → DAT,
   per-race `placements` for gear), so the manifest is self-describing. `cexi dats new` and
   `cexi dats build` write it; re-running just overwrites the same key (no duplicates, no side
@@ -278,17 +265,17 @@ resource files that live next to the source JSON into `dats/resources/<type>/<id
 | Command | What it does |
 |---|---|
 | `cexi dats new` | **Interactive wizard** — place prebuilt DATs (gear/mount/entity) at new model ids and write a manifest action |
-| `cexi dats build [manifest]` | Build the manifest directly into one or more live targets (`--target pivot,dir,hd`; default `pivot`); `--dry-run` previews |
-| `cexi dats package <project>` | Zip the project's built DATs + F/V tables (`--from pivot`/`dir`/`hd`) into `dats/packages/<project>.zip` (ROM-relative, XIPivot-ready) |
+| `cexi dats build [manifest]` | Build into the **base install** (`FFXI_DIR`), then `sync_pivot_from_base()` when a pivot is configured; `--dry-run` previews (no separate `plan` command) |
+| `cexi dats package <project>` | Zip the project's built DATs + F/V tables (`--from dir`/`pivot`/`hd`, default `dir`) into `dats/packages/<project>.zip` (ROM-relative, XIPivot-ready) |
 | `cexi dats release <project>` | Stage the project's DATs + full FTABLE/VTABLE set + patched `FFXiMain.dll` into `<release>\Game\FINAL FANTASY XI\…` (a launcher build folder). Prompts for the folder; `--to <path>`, `--no-dll` |
-| `cexi dats undo <project>` | Reverse a build: delete the placed DATs + clear their file_id entries in every target it was built into, then remove the manifest (`--keep-json` keeps it) |
+| `cexi dats undo <project>` | Reverse a build: delete the placed DATs + clear their file_id entries, then remove the manifest (`--keep-json` keeps it) |
 | `cexi dats json [manifest]` | Print the normalized manifest JSON |
 | `cexi dats prepare <source> [manifest]` | Copy an exported JSON/change-set into `dats/resources` and add an action |
 | `cexi dats changelog [manifest]` | Table of each action's recorded inline `result` (model_id → file_id → DAT) |
 
-> Note: `new`/`build` write DATs + table patches straight into the chosen live target
-> (`FFXI_DIR` or `FFXI_PIVOT_DIR`), while `zone` actions still build the
-> `dats/catseyexi` + `dats/ffxi-hd` package trees described below.
+> Note: `new`/`build` write mesh/entity/gear/mount DATs + table patches into **`FFXI_DIR`**
+> (then sync pivot tables), while `zone` actions still build the `dats/catseyexi` +
+> `dats/ffxi-hd` package trees.
 
 ## Current builders
 

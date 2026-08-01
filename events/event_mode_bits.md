@@ -45,7 +45,12 @@ So **99%+ of retail cutscenes set `CliEventModeLocal = 0x20`.** The low-byte
 `0x2003` (Ailevia's proven cinematic value), which is identical to Balasiel's
 `0x0003` at the client.
 
-## APPLIED-bit semantics (2026-07-20, from the xiclient decomp)
+## APPLIED-bit semantics (2026-07-20, from the xiclient reimplementation)
+
+> ⚠️ Trust tier: **xiclient is a fan-made reimplementation, not a decompile of the real
+> client** (see the [events README source-trust tiers](README.md)). Its class/file names
+> below (`ActorTelemetry.cpp` etc.) are invented; treat these semantics as tier-3 until
+> byte- or decompile-confirmed.
 
 What the applied byte (`HIBYTE(stored) | 0x20`) actually gates, per
 `ActorTelemetry.cpp` (the uninvolved-actor hide pass + `SomePosUpdater`):
@@ -134,28 +139,23 @@ Verified in xiclient decompile; the rest inferred from retail combinations.
 
 ## High byte
 
-Non-zero in only 0.4% of retail ops (`0x0103`, `0x0413`). UE5 uses this byte for
-`CameraMode` (`hi | 0x20`), but retail's ~100% zero-hi indicates the byte is
-either legacy or handled by a different code path in FFXiMain.dll. **Compiler
-default: hi byte = 0.**
+Non-zero in only 0.4% of retail *stored* ops (`0x0103`, `0x0413`) — but per the
+correction above it is the byte the client actually **applies** (`HIBYTE | 0x20`),
+so it is load-bearing, not legacy. The compiler also derives the server-side
+flags from it: `server_flags = (event_mode >> 8) & 0x12` (the stored 0x1000
+hide-NPC / 0x0200 hide-PC masks mirrored to the server).
 
-## Compiler defaults
+## Compiler default
 
 The [event_cutscene](../../schema/event_cutscene.json) `flags.eventMode` field
-accepts a raw u16; the compiler defaults it based on the scene shape:
-
-| scene has          | default `eventMode` | rationale                                     |
-|--------------------|---------------------|-----------------------------------------------|
-| dialog only        | `0x0013` (19)       | matches 77% of retail dialog cutscenes        |
-| camera + dialog    | `0x0013` (19)       | same — camera tracking flag (0x04) is optional |
-| player-hide scene  | `0x0003` (3)        | 0x13 minus PC bit → drop other players        |
-| NPC-hide scene     | `0x0011` (17)       | 0x13 minus NPC bit → NPC-less shot            |
-| talk-cam tracking  | `0x0017` (23)       | 0x13 + bit 2 → camera follows NPC             |
-| scene end          | `0x0000` (0)        | emitted implicitly by `exit_cutscene`         |
+accepts a raw u16. The compiler emits **one** default — `EVENT_MODE_DEFAULT =
+0x2003` (Ailevia's proven cinematic value; identical to Balasiel's `0x0003` at
+the client, since both apply as `0x20`) — with **no scene-shape branching**.
 
 The user can override via `flags.eventMode: <raw u16>` in the JSON when they need
-to reproduce an exact retail behavior — the raw values above cover 99.7% of
-observed usage.
+to reproduce an exact retail behavior; the STORED masks behind the Presentation
+effects are 0x1000 (hide other NPCs), 0x0200 (hide other PCs), 0x0400 (talk-cam
+tracking) — see the applied-bit table above.
 
 ## Open items
 
@@ -163,8 +163,9 @@ observed usage.
   have `0x42 cancel_set` cleared vs armed to test the "uninterruptible" hypothesis.
 - **Bit 7 (0x80)** — appears in `0x93` (3% of ops). Dump the 66 events that use it,
   check for a shared trait (multi-party cutscene? overlay-heavy?).
-- **High byte** — dump the 9 events with hi != 0 (`0x0103`, `0x0413`) and see if they
-  share a category. Until pinned, compiler emits 0 (matches 99.6%).
+- **High byte** — dump the 9 retail events with stored hi != 0 (`0x0103`, `0x0413`)
+  and see if they share a category. The compiler emits `0x2003` (hi = 0x20, the bit
+  the handler force-sets anyway).
 
 Cross-references: [opcodes.md](opcodes.md#0x20-0x3f--presentation-dialogue-entities-branching),
 [cutscenes.md](cutscenes.md), [maat_93_study.md](maat_93_study.md).

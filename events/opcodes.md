@@ -108,7 +108,8 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0x25` | 1 | **Wait** for a menu select (from `0x24`). |
 | `0x26` | 1 | Yield the VM. *(May be deprecated.)* |
 | `0x27` | 7 | `FUNC_REQSet` → `XiEvent::ReqSet` (server-request helper). |
-| `0x28`–`0x2A` | 7 | Like `0x27` with extra checks; end by calling `XiEvent::GetReqStatus`. |
+| `0x28`–`0x29` | 7 | Like `0x27` with extra checks; end by calling `XiEvent::GetReqStatus`. |
+| `0x2A` | 6 | Like `0x27`/`0x28` with extra checks; ends by calling `XiEvent::GetReqStatus`. *(6 bytes, not 7 — matches `_FIXED_SIZES`; an earlier revision folded it into the 0x28–0x2A row.)* |
 | `0x2B` | 7 | **Print event message** with a given entity as speaker (like `0x1D`). Message operand = the same 2-byte `references[]` work-selector, at byte offset 5. |
 | `0x2C` | 13 | Create/load a `CMoSchedularTask` on an entity (an **entity action/animation**). |
 | `0x2D` | 13 | Create/load a **zone-based** `CMoSchedularTask` (a scheduled zone action). |
@@ -164,7 +165,7 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0x58` | 1 | Yield the VM. |
 | `0x59` | var | Multiple cases — update an entity's event data. |
 | `0x5A` | var | Update the event position information (multi-field). |
-| `0x5B` | var | Load an extended scheduler task. |
+| `0x5B` | 15 | Load an extended scheduler task. *(Fixed 15 — corpus-verified 2026-08: 67k clean decodes across all retail zone events; an external claim of a 17-byte variant has no instance in this corpus.)* |
 | `0x5C` | var | Multiple cases — **the music player**. |
 | `0x5D` | 5 | Set/ease the current music to a new volume. |
 | `0x5E` | 5 | Stop the event entity's action, reset to idle motion. |
@@ -182,7 +183,7 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0x63` | 3 | **Play an animation on the event entity and wait** for it to complete. |
 | `0x64` | 11 | Distance between two points, store. |
 | `0x65` | 11 | 3D distance between two entities, store. |
-| `0x66` | var | Like `0x5B` with different args. |
+| `0x66` | 15 | Like `0x5B` with different args. *(Fixed 15 — corpus-verified 2026-08, 82k clean decodes; same note as `0x5B`.)* |
 | `0x67` | 5 | **Hide the entire HUD** for the cutscene (compass, status, chat, menus…). |
 | `0x68` | 1 | **Unhide the HUD**. |
 | `0x69` | 4 | Set the volume of a sound type. |
@@ -193,8 +194,8 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0x6E` | 7 | Play an **emote animation** on an entity. |
 | `0x6F` | 1 | Sleep the VM until `WaitTime` reaches 0 (yieldable sleep). |
 | `0x70` | 1 | Check the event entity render flag; yield if set, else cancel movement & advance. |
-| `0x71` | var | Handle **string input** from the player (passwords/prompts). |
-| `0x72` | var | Load event weather info and apply it ([weather ids](weather.md)). |
+| `0x71` | var | Handle **string input** from the player (passwords/prompts). *(Sub `0x20` = 16 bytes — corpus-verified 2026-08: every retail site is `71 20` + seven u16 param refs `0x1002…0x1008`, then a companion `71 21`; an external claim of 10 bytes splits that operand run.)* |
+| `0x72` | var | Load event weather info and apply it ([weather ids](weather.md)). *(Sizes {4, 6}; an external catalog adds a 10-byte case — no instance found in the zone-event corpus; unadjudicated. Beware `0x72` = ASCII `'r'` when scanning: naive sweeps hit it constantly inside embedded text.)* |
 | `0x73` | 11 | Schedule **cast-magic** tasks on two entities. |
 | `0x74` | 2 | Adjust the event entity's `Render.Flags1`. |
 | `0x75` | var | Load a room, update the player's sub-region with the server. |
@@ -216,7 +217,7 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | op | len | description |
 |----|-----|-------------|
 | `0x80` | 5 | Test an entity for several conditions; yield or advance (e.g. loading an action). |
-| `0x81` | 6 | Set an unknown value in an entity's warp data. |
+| `0x81` | 6 | Set an unknown value in an entity's warp data. *(Semantics unverified prose — no code corroboration; an external catalog reads it as "blinking". Size 6 agrees on both sides.)* |
 | `0x82` | 7 | Hit-test a rect from the current event entity's position. |
 | `0x83` | 3 | Get & store the current game time. |
 | `0x84` | 1 | Adjust the event entity's `Render.Flags3`. |
@@ -250,7 +251,7 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0xA8` | 6 | Open the map (if requested), unlock & rename markers. |
 | `0xA9` | 3 | Disable game time, set a specific time. |
 | `0xAA` | 17 | Build a Vana'diel timestamp, split into parts, store. |
-| `0xAB` | var | Multi-case — alter entity render flags. |
+| `0xAB` | var | Multi-case — alter entity render flags. *(Sizes {2, 4}; an external catalog adds a 6-byte case — no instance found in the zone-event corpus; unadjudicated.)* |
 | `0xAC` | var | Multi-case — set entity `StatusServer`/`StatusEvent`/`Render.Flags6/7`. |
 | `0xAD` | 12 | Multi-case — scheduler actions on two entities. |
 | `0xAE` | var | Multi-case — weather, entity name color, EnvironmentAreaId… |
@@ -285,7 +286,7 @@ start-task fires a scheduler resource); the camera move itself lives in those `0
 | `0xD3` | 6 | Clear an entity's motion-queue lists. |
 | `0xD4` | var | Multi-sub-opcode — open the map & query the user for input. |
 | `0xD5`–`0xD7` | — | Variants of `0x45` / `0x52` / `0x55`. |
-| `0xD8` | var | Set an unknown flag (sound-effect related) **and/or** set `ExtData[1]->EventDir` for an entity (two handlers share this byte). |
+| `0xD8` | var | Set an unknown flag (sound-effect related) **and/or** set `ExtData[1]->EventDir` for an entity (two handlers share this byte). *(Dual-handler claim is unverified prose — no code corroboration here and no other source has it; flagged by the 2026-08 external crosscheck.)* |
 | `0xD9` | 2 | (end of the known table) |
 
 ---

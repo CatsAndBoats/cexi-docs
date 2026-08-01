@@ -30,11 +30,11 @@ Wrote: …/FINAL FANTASY XI/ROM/21/54.DAT
 
 ─ server trigger (paste into the NPC's Lua) ─────
 function onTrigger(player, npc)
-    player:startEvent(10095)
+    player:startCutscene(10095)
     …
 ```
 
-Then add the printed Lua to that NPC's script (`player:startEvent(10095)`) and reload the
+Then add the printed Lua to that NPC's script (`player:startCutscene(10095)`) and reload the
 server. The client reads the edited DATs straight from the install (edits are in place).
 
 ---
@@ -140,7 +140,7 @@ rebuild both DATs                          (xi_event.build_event_dat / xi_dialog
    ▼
 write the DATs back in place (+ .base backup)   — pristine bytes preserved in .base
    ▼
-print the event id + a server-side Lua startEvent stub
+print the event id + a server-side Lua startCutscene stub
 ```
 
 Code: [`src/cexi/event/xi_author.py`](../../src/cexi/event/xi_author.py) (the authoring logic),
@@ -185,10 +185,13 @@ editor's Events panel now show the high-index lines too.
 ## Caveats — read before you ship
 
 - **It is NOT idempotent.** Each run *appends* another event and more dialogue (it reads the
-  current mirror state and adds to it). Run it twice and you get two events + duplicate lines.
-  To redo cleanly, delete the output-mirror DATs (there's no `event reset` command yet).
+  current DAT state and adds to it). Run it twice and you get two events + duplicate lines.
+  To redo cleanly, run `cexi event dialogue reset` (restores the dialog DAT from its `.base`
+  backup; `--full` also resets the zone event DAT).
 - **A client edit does nothing alone.** The event only fires when the **server** calls
-  `player:startEvent(<id>)` on that NPC — paste the printed Lua stub and **reload the server**.
+  `player:startCutscene(<id>)` on that NPC — paste the printed Lua stub and **reload the
+  server**. (`startCutscene`, not `startEvent` — it locks the player into CUTSCENE mode; see
+  [event_mode_bits.md](event_mode_bits.md).)
   The `--actor` id and the NPC the server triggers must be the same entity.
 - **The client must read the edited DAT** — edits are written in place under `FFXI_DIR`
   (the pristine bytes live in the `<dat>.base` backup).
@@ -205,8 +208,9 @@ This authors **plain multi-line dialogue** only. The bytecode VM also does menus
 camera, NPC animation, doors, and scene presentation ([opcodes.md](opcodes.md),
 [cutscenes.md](cutscenes.md)). The [prototype](prototype.md) sketches the full JSON→bytecode
 compiler (`say` / `menu` / `branch` / `camera` steps); the writer + dialog-append foundations
-here are what it builds on. Natural next steps: a `menu` step (`0x24`/`0x25`/`0x40`), `branch`
-on the chosen option (`0x02`/`0x3E`), and an `event reset` for clean re-runs.
+here are what it builds on. Natural next steps: a `menu` step (`0x24`/`0x25`/`0x40`) and
+`branch` on the chosen option (`0x02`/`0x3E`). (The reset for clean re-runs shipped as
+`cexi event dialogue reset [--full]`.)
 
 ---
 

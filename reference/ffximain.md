@@ -16,7 +16,7 @@
 | `POL1` | `0x009CC000` | `0x000AF600` | `0x001E5A00` | `0x001E5898` | Compressed `.text` + unpacker stub |
 | `.reloc` | `0x00BB2000` | `0x00295000` | `0x0002F400` | `0x0002F268` | Relocations |
 
-The OEP (`AddressOfEntryPoint`) points **into POL1** at RVA `0x00BB17B0` — the unpacker stub executes before any game code.
+The OEP (`AddressOfEntryPoint`) points **into POL1** at RVA `0x00BB17B0` — the unpacker stub executes before any game code. *(The post-unpack entry point — where execution lands in the decompressed `.text`, i.e. the address you want after dumping — is RVA `0x3162AF` per an external decompile (2026-08 crosscheck); not independently verified here.)*
 
 ---
 
@@ -60,17 +60,24 @@ def lzss_decompress(src: bytes, dst_size: int) -> bytes:
 - `bit = 0` → copy `length` bytes from `output[current - offset]` to output
 - `offset = 0` is the end-of-stream sentinel
 
-Verified: `ffximain_unpacker.py` produces exactly 3,305,838 bytes that disassemble as valid x86 code.
+Verified: `cexi ffximain unpack` produces exactly 3,305,838 bytes of `.text` that
+disassemble as valid x86 code.
 
 ---
 
 ## Unpacking Tools
 
-All outputs are **research only** — the game loads the original packed DLL, not any of these.
+Lead with the **CLI** (`cexi ffximain …`). All outputs are **research only** — the
+game loads the original packed DLL, not any of these.
 
-### ffximain_unpacker.py
+### `cexi ffximain unpack`
 
 Decompresses POL1 and writes a fully patched **`FFXiMain_unpacked.dll`**.
+
+```
+uv run cexi ffximain unpack
+uv run cexi ffximain unpack --dll PATH --output PATH
+```
 
 - Restores the decompressed `.text` bytes back into the PE file structure
 - Fixes `SizeOfRawData` in the `.text` section header so the PE is valid
@@ -80,9 +87,14 @@ Decompresses POL1 and writes a fully patched **`FFXiMain_unpacked.dll`**.
 **Why the game won't run it:** The OEP stub would try to decompress POL1 into
 `.text` again, corrupting the already-filled section. Research only.
 
-### ffximain_text_dump.py
+### `cexi ffximain text-dump`
 
 Decompresses POL1 and writes two flat files:
+
+```
+uv run cexi ffximain text-dump
+uv run cexi ffximain text-dump --dll PATH --output-dir DIR
+```
 
 - **`pol_decompressed.bin`** — raw `.text` bytes, no PE wrapper (3.2 MB)
   Load in Ghidra as a raw binary (x86 32-bit, image base `0x10000000`).
@@ -91,27 +103,41 @@ Decompresses POL1 and writes two flat files:
 
 Takes ~2–3 minutes to run.
 
+### `cexi ffximain gear-groups` / `gear-patch`
+
+```
+uv run cexi ffximain gear-groups [--race RACE] [--slot SLOT] [--json]
+uv run cexi ffximain gear-patch [--max-model N] [--dry-run]
+```
+
+List per-race per-slot gear model groups from the DLL, or patch those groups so
+custom `model_id`s resolve (pairs with `cexi ftable expand gear`).
+
 ### When to use which
 
 | Goal | Tool |
 |---|---|
-| Full decompiler (Ghidra/IDA) with PE metadata | `ffximain_unpacker.py` |
-| Grep / binary search scripts | `ffximain_text_dump.py` |
-| Search for a specific constant or instruction | `search_model_formula.py` / `search_gear_formula.py` against `pol_decompressed.bin` |
-| Disassemble a region of the packed DLL (non-.text sections) | `lib/disasm_lookup.py` |
+| Full decompiler (Ghidra/IDA) with PE metadata | `cexi ffximain unpack` |
+| Grep / binary search scripts | `cexi ffximain text-dump` |
+| Gear group table / custom model_id patch | `cexi ffximain gear-groups` / `gear-patch` |
+| Search for a specific constant or instruction | research scripts against `pol_decompressed.bin` (see below) |
+| Disassemble a region of the packed DLL (non-.text sections) | research `disasm_lookup.py` |
 
 ### Workflow
 
 ```
 FFXiMain.dll  (packed — game uses this)
       │
-      ├─ ffximain_unpacker.py ──────────→ misc/FFXiMain_unpacked.dll  (Ghidra/IDA)
+      ├─ cexi ffximain unpack ──────────→ misc/FFXiMain_unpacked.dll  (Ghidra/IDA)
       │
-      └─ ffximain_text_dump.py ─────────→ pol_decompressed.bin        (search scripts)
+      └─ cexi ffximain text-dump ───────→ pol_decompressed.bin        (search scripts)
                                         └→ pol_decompressed.txt        (grep)
 ```
 
-### Other tools
+### Research scripts (not CLI)
+
+One-off helpers under `docs/dats/research/` / `research/` — there is **no**
+`ffximain_unpacker.py` in the tree; use the CLI above.
 
 | Script | Purpose |
 |---|---|
@@ -201,7 +227,7 @@ FFXiMain disassembly.
 
 ### Menu definition structs
 
-xiclient's packed menu definition structs line up with `cexi ui menu-pos`:
+xiclient's packed menu definition structs line up with `cexi ui layout menu-pos`:
 
 ```cpp
 struct FrameDefinitionHeader {
@@ -297,7 +323,15 @@ Found at VA `0x100C513D` in the decompressed `.text`. This is a small function t
 | 3000 – 3499 | `(modelid - 3000) + 99907` | +96907 |
 | **3500+** | `(modelid - 3500) + 101739` | **+98239** |
 
-All retail monsters use the **3500+ range** (offset +98239). Tiger Familiar (modelid 308) uses the **0–1499 range** (offset +1300) for its skeleton (`tige`) file at `ROM/5/3.DAT`.
+Retail monsters use **all four ranges** — the server's `mob_pools` table has ~7,176 modelids below 3000 and 122 in 3000–3193 (Behemoth is 404, Tiamat 608, Cerberus 1793). An earlier revision claimed "all retail monsters use the 3500+ range", which is wrong; what's true is that **custom injected monsters** land in the open-ended 3500+ range. Tiger Familiar (modelid 308) uses the **0–1499 range** (offset +1300) for its skeleton (`tige`) file at `ROM/5/3.DAT`.
+
+**Registration extent (byte-checked against the retail FTABLE, 2026-08):** range 3 is only
+*registered* for modelids **3000–3193** (fids 99907–100100; every fid for 3194–3499 has
+VTABLE=0, and no retail `mob_pools` row uses a modelid in 3194–3499 — the tail of the range
+is simply unused). Range 4's first registered fid is exactly `101739 = 3500 + 98239`, and a
+later dense run starts at `102239 = 4000 + 98239` — clean family alignment that also refutes
+an external candidate base of `+98546` for this range (under which those runs would start at
+modelids 3193/3693).
 
 The 4 ranges exist for historical reasons — each represents a batch of monsters added to the FTABLE at different points in the game's development. The 3500+ range is open-ended and covers all content from late retail through to the final expansion.
 
@@ -323,10 +357,10 @@ Retail cap:      last non-zero FTABLE entry at file_id 109480
 | Last retail modelid (3500+ range) | **11241** | `109480 - 98239` |
 | First safe custom modelid | **11242** | One above retail cap |
 | Recommended custom start | **15000** | 3758 slots of buffer above retail |
-| FTABLE expanded to | 118240 entries | `cexi ftable expand` default (`--target-modelid 20000`) |
-| Max modelid at expanded size | **20000** | `(118240 - 1) - 98239` |
+| FTABLE expanded to | 128240 entries | `cexi ftable expand` default (`MAX_ENTITY_MODELID=30000` → gear floor 128240) |
+| Max modelid at expanded size | **30000** | `(128240 - 1) - 98239` |
 
-**Recommended custom range: 15000 – 20000** (5,001 slots; not a hard limit — expand higher to raise it)
+**Recommended custom range: 15000 – 30000** (raise via `CEXI_MAX_ENTITY_MODELID` + `cexi ftable expand entity N`)
 
 For modelid 15000: `file_id = 15000 + 98239 = 113239` (within expanded FTABLE, zero in retail).
 
@@ -336,4 +370,4 @@ For modelid 15000: `file_id = 15000 + 98239 = 113239` (within expanded FTABLE, z
 
 - The primary mesh (`moun`) file for monsters is looked up via a **different mechanism** — not directly derivable from this modelid formula. Only the skeleton/animation (`tige`) file uses the formula above.
 - ROM10 loads correctly (confirmed via Process Monitor). FTABLE10/VTABLE10 are read at Ashita startup.
-- The `102429` "BASE_MODEL_OFFSET" in older tooling versions was wrong and has been corrected to `MODEL_FILE_OFFSET = 98239` in `ffxi_dat_ftable_inject.py`.
+- The `102429` "BASE_MODEL_OFFSET" in older tooling versions was wrong and has been corrected to `MODEL_FILE_OFFSET = 98239` in `src/cexi/entity/xi_core.py`.

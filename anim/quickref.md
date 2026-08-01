@@ -12,7 +12,8 @@ Copy-paste commands for the common animation tasks. `<dat>` is a ROM-relative sp
 
 ```bash
 uv run cexi anim list  <dat>                 # every track: name, frames, joints, seconds
-uv run cexi anim json  <dat> --anim idl      # one track's channels as JSON
+uv run cexi anim list  <dat> --json          # same, as JSON
+uv run cexi anim json  <dat>                 # all tracks as JSON
 ```
 
 ## Export (to glTF for Blender / C4D)

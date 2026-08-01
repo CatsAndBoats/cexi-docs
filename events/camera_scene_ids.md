@@ -72,11 +72,14 @@ The **placement** (disk path + FTABLE value) is independent of the scene's **fil
 **and** the pivot overlay pack. The scene DAT is written to `FFXI_DIR/ROM{vt}/…` and
 copied to `…/pivot/ROM{vt}/…`.
 
-> **Why both tables, and why this is safe on ROM10.** The client OR-merges every
-> `(F|V)TABLE` it loads into one logical table (xim `FileTableManager.combine`,
-> `thirdparty/xim/.../table/FTable.kt`). A **free** file id (the allocator guarantees the
-> slot is 0 in every table) set to the same `(ftval, vt)` across root + ROM{vt} merges
-> cleanly. The earlier "ROM10 crashes" belief conflated this with the high-`p`/71k-file-id
+> **Why both tables, and why this is safe on ROM10.** The client consults the loaded
+> `(F|V)TABLE` pairs with the VTABLE version byte gating each entry — an overlay entry
+> wins (shadows the base) only where its byte names its own ROM. (xim models this as a
+> single OR-merged table — `FileTableManager.combine`, `thirdparty/xim/.../table/FTable.kt`
+> — but external byte evidence (2026-06-24) shows the real client is volume-direct +
+> update-shadows-base; the practical rule is the same.) A **free** file id (the allocator
+> guarantees the slot is 0 in every table) set to the same `(ftval, vt)` across root +
+> ROM{vt} resolves identically under either model. The earlier "ROM10 crashes" belief conflated this with the high-`p`/71k-file-id
 > crash (the only A/B-proven cause) **and** with a stale pivot `ROM10` entry *shadowing* the
 > registration — which is exactly what patching (not zeroing) the pivot ROM10 table now
 > prevents. See `_write_camera_scene` / `_publish_pivot_tables` in `xi_bridge.py`.
@@ -104,6 +107,17 @@ keeping direction. See `csCaptureCameraPose` in `viewport/cutscene.js` and
 - Bug: still keyframe `smooth: 0` was stamped onto the whole curve → mode 0 on a
   3-point route → crash. Fixed: multi-point never keeps mode 0.
 
+> ⚠️ **This field's semantics are contested — don't over-trust either camp.** Our own docs
+> are split: this file (+`scene_dat_writer.md`, `cutscene-dev-guide.md`, `common_crashes.md`)
+> says retail multi-point = **4**, while `cutscene_authoring.md` and the decoder comment in
+> `xi_event.py` say **1** is the most common retail multi-point value. An external client-RE
+> claim (2026-08 crosscheck, camera player at VA `0x1003D150`) says interpolation is chosen
+> by **key count** (2 keys → LINEAR, >2 → CUBIC) and the `+0x14` u32 never feeds it — which
+> would make the value cosmetic *except* that our mode-0-on-multi-point crash reproduces (the
+> first behavioral effect anyone has pinned on this field). Until someone histograms retail
+> routes and reconciles the crash with the key-count claim, treat "mode 4 on writes" as a
+> safe convention, not established semantics.
+
 ### FOV
 
 Route stores **focal length**, not degrees. Editor stores degrees; compile converts
@@ -112,13 +126,15 @@ Route stores **focal length**, not degrees. Editor stores degrees; compile conve
 ## Event bytecode pattern (working)
 
 ```
+0x20 01          lock player (CliEventUcFlag) — first opcode of cinematic prologue
 0x42 cancel_set
 0x46 01          camera on
 0x45 fdo1        fade (p=200 → file 30904) on event entity
 0x1C wait
 0x38             event mode
 0x4A             look_at (optional)
-0xBA             place NPC only — NEVER the player (0x7FFFFFF0)
+0xBA             place entity (NPC or player 0x7FFFFFF0)
+                 — player uses 0xBA + 0x80 only (no NPC show / 0x4E prefix)
 0x45 s000        camera shot (p=300..599 → custom DAT)
 0x45 fdi1        fade in
 … dialog …

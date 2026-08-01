@@ -94,8 +94,9 @@ slot count:
 uv run cexi model json --free
 ```
 
-Then add the replacement through `cexi dats prepare/plan/build` if you want a
-reproducible package.
+Then add the replacement through `cexi dats prepare` + `cexi dats build` if you
+want a reproducible package (`build --dry-run` to preview).
+
 
 → See [../dats/README.md](../dats/README.md) for package builds.
 → See [model/free.md](../model/free.md) for checking free slots.

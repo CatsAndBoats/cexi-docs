@@ -1,12 +1,11 @@
 ﻿# cexi model json --free
 
-Scans the custom entity model range (monsters, NPCs, objects) (modelid 15,000–20,000) across all
-FTABLE/VTABLE pairs and reports:
+Scans the custom entity model range (monsters, NPCs, objects) (modelid 15,000–30,000) across all
+FTABLE/VTABLE pairs and emits JSON with:
 
 - the next free modelid and its file_id
-- the `mob_pools` binary blob ready to paste
-- a summary of how many slots are used vs remaining
-- a table of all currently registered custom entries
+- the `mob_pools` binary blob ready to paste (`next_model_id_text`)
+- the configured range and currently occupied custom slots
 
 Run this before assigning custom model IDs manually, or after `cexi ftable
 delete` to confirm a slot was freed. New reproducible packages should prefer
@@ -26,42 +25,41 @@ No options.
 
 ## Example output
 
-```
-==============================================================
-  FFXI Custom Monster Model - Next Available Slot
-==============================================================
-
-  Next free model ID : 15000
-  File ID            : 113239  (modelid + 98239)
-  mob_pools blob     : 0x0000983A00000000000000000000000000000000
-
-  Custom range       : modelid 15000 - 20000
-  Slots used         : 0
-  Slots remaining    : 5001
-
-  No custom slots registered yet.
-
-  To package new content:  cexi dats prepare ... && cexi dats build
-
-==============================================================
+```json
+{
+  "range": {
+    "start": 15000,
+    "end": 30000
+  },
+  "next_model_id": 15000,
+  "next_file_id": 113239,
+  "next_model_id_text": "0x0000983A00000000000000000000000000000000",
+  "occupied": []
+}
 ```
 
 With some slots in use:
 
+```json
+{
+  "range": { "start": 15000, "end": 30000 },
+  "next_model_id": 15002,
+  "next_file_id": 113241,
+  "next_model_id_text": "0x00009A3A00000000000000000000000000000000",
+  "occupied": [
+    { "model_id": 15000, "file_id": 113239, "rom": "ROM10", "dat": "ROM10/1/0.DAT" },
+    { "model_id": 15001, "file_id": 113240, "rom": "ROM10", "dat": "ROM10/1/1.DAT" }
+  ]
+}
 ```
-  Registered custom slots:
-  --------  --------  -----  ------------------------------
-   modelid   file_id    rom  dat
-  --------  --------  -----  ------------------------------
-     15000    113239  ROM10  ROM10/1/0.DAT
-     15001    113240  ROM10  ROM10/1/1.DAT
-```
+
+(For a human-readable “Next free model ID” text report, use `cexi entity recommend`.)
 
 ---
 
 ## The mob_pools blob
 
-The `mob_pools blob` value is the 20-byte `look_t` binary literal for the
+The `next_model_id_text` value is the 20-byte `look_t` binary literal for the
 `mob_pools.modelid` column. Paste it directly into SQL:
 
 ```sql
@@ -79,26 +77,35 @@ bytes 4–19 : zeros       (equipment slots, unused for monsters)
 
 ---
 
-## Why the range is 15,000 – 20,000
+## Why the range is 15,000 – 30,000
 
 The last retail monster modelid is **11,241** (file_id 109,480). The custom
 range starts at **15,000** — giving a ~3,758-slot buffer above the retail cap
 to absorb any future retail expansion without collision. The upper bound of
-20,000 is simply the default FTABLE expansion size (118,240 entries):
+**30,000** is the default entity ceiling (`MAX_ENTITY_MODELID` in
+`src/cexi/xi_config.py`, overridable via env `CEXI_MAX_ENTITY_MODELID`):
 
 ```
-max_file_id  = 118240 - 1 = 118239
-max_modelid  = 118239 - 98239 = 20000
+entity file_ids  = 113239 – 128239   (modelid 15000–30000, +98239)
+gear floor       = CUSTOM_GEAR_BASE = 128240
+                 = 98239 + MAX_ENTITY_MODELID + 1
 ```
 
-It is not a hard limit — expand to a higher `--target-modelid` and the ceiling
-rises with it (also bump `MODEL_SAFE_END` in `src/cexi/entity/xi_core.py`).
+It is not a hard limit — raise the ceiling and re-expand:
+
+```
+uv run cexi ftable expand              # both entity + gear at config defaults
+uv run cexi ftable expand entity 30000 # entity buffer only, explicit ceiling
+# or: set CEXI_MAX_ENTITY_MODELID=40000 then cexi ftable expand
+```
+
+`MODEL_SAFE_END` in `src/cexi/entity/xi_core.py` is derived from
+`MAX_ENTITY_MODELID` — do not hardcode a separate bump.
 
 → See [reference/model-file-ids.md](../reference/model-file-ids.md) for the
 full custom range derivation and the file_id space map.
 
-→ If the range is full, run `cexi ftable expand --target-modelid 30000` (or
-higher) and the range ceiling will rise accordingly. See
+→ If the range is full, expand (or raise `CEXI_MAX_ENTITY_MODELID` first). See
 [ftable/expand.md](../ftable/expand.md).
 
 ---

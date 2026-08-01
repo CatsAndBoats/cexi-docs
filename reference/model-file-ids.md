@@ -38,7 +38,14 @@ The monster lookup function takes a `modelid` and returns a `file_id` using a
 | 3000 – 3499 | `modelid + 96907` | +96907 |
 | **3500+** | `modelid + 98239` | **+98239** |
 
-Custom monsters always land in the **3500+ range**.
+Custom monsters always land in the **3500+ range**. Retail monsters use all four ranges
+(Behemoth is modelid 404, Cerberus 1793; 122 retail mobs sit in 3000–3193).
+
+> **Registration extent (byte-checked 2026-08):** range 3 is only *registered* for modelids
+> **3000–3193** — every fid for 3194–3499 is VTABLE=0 and no retail `mob_pools` row uses
+> those ids; the tail of the nominal 3000–3499 range is unused. Range 4 is anchored by its
+> first registered fid `101739 = 3500 + 98239` (and a dense run at `102239 = 4000 + 98239`),
+> which also refutes an externally-proposed `+98546` base for this range.
 
 ### Why 4 ranges?
 
@@ -89,11 +96,18 @@ offset added to the item's `MId` (model index) to form a combined model ID:
 | Sub | `+ 0x7000` | `0x7000 + MId` |
 | Range | `+ 0x8000` | `0x8000 + MId` |
 
-This combined value then goes through a **separate gear lookup function** in
-FFXiMain.dll. That function applies a **per-race file_id offset** to land in
-the correct race-specific DAT:
+This combined value then goes through a **separate gear lookup** driven by the
+per-`(race, slot)` **group tables** in FFXiMain.dll (ported as `RACE_TABLES` in
+`src/cexi/gear/xi_core.py`). Each slot has up to 6 groups of
+`(base_file_id, count)`; `model_id` is a **cumulative** index across those
+groups. Resolution is `resolve_gear_dat(race, slot, model_id)` /
+`slot_file_ids` — not a single flat offset for every mid.
 
-| Race | file_id offset (main hand, range 1) |
+The simple per-race offsets below apply only to **group 0** (typically
+`model_id` 0–511 for a given slot). For `model_id ≥ 512`, later groups use
+different base file_ids — always go through the tables / `resolve_gear_dat`.
+
+| Race | file_id offset (main hand, **group 0 only**) |
 |---|---|
 | Hume Male | -16184 |
 | Hume Female | -13008 |
@@ -204,15 +218,15 @@ Example for modelid 15000 (`0x3A98`):
 
 ## Tools
 
-| Script | Purpose |
+| Command | Purpose |
 |---|---|
-| `ffxi_ftable_expand.py` | Expand FTABLE/VTABLE beyond retail size, create ROM10 |
-| `ffxi_dat_ftable_inject.py` | Inject a custom monster model DAT into ROM10 and register it |
-| `ffxi_dat_ftable_lookup.py` | Look up any file_id or modelid in a FTABLE/VTABLE pair |
-| `ffxi_monster_model_list.py` | Dump all registered monster models (file_id, modelid, DAT path) |
-| `ffxi_monster_model_recommendation.py` | Show next free custom modelid slot in ROM10 |
-| `ffxi_ftable_range_scan.py` | Scan retail FTABLE for occupied blocks |
-| `ffxi_ftable_dat_headers.py` | Probe DAT magic headers at specific file_ids |
+| `cexi ftable expand` / `expand entity [N]` | Expand FTABLE/VTABLE for custom entity (+ gear) buffers |
+| `cexi ftable lookup` | Look up any file_id or modelid in FTABLE/VTABLE |
+| `cexi ftable info` | Live custom ranges and free capacity |
+| `cexi model json` / `cexi model json --free` | Dump registered models; next free custom entity slot (JSON) |
+| `cexi entity inject` | Legacy: inject a custom entity DAT into ROM10 (prefer `cexi dats build`) |
+| `cexi ftable range-scan` | Scan FTABLE for occupied blocks |
+| `cexi ftable delete` | Free a registered custom slot |
 
 See [ffximain.md](./ffximain.md) for full documentation of the monster formula
 derivation from FFXiMain.dll decompilation.

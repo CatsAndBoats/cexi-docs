@@ -286,8 +286,8 @@ distinct file types. Notable real magics hiding here are `DMB\0` and `\x89PNG`
 ## Tools
 
 ```
-uv run cexi ftable lookup <file_id>     # resolve any file_id → DAT + header bytes
-uv run cexi ftable range-scan           # scan for occupied file_id blocks
+uv run cexi ftable lookup --file-id N  # resolve any file_id → DAT + header bytes
+uv run cexi ftable range-scan          # scan for occupied file_id blocks
 uv run cexi gear json                  # dump all gear model → DAT mappings
-uv run cexi model json                 # dump all entity model (monsters, NPCs, objects) → DAT mappings
+uv run cexi model json                  # dump all entity model (monsters, NPCs, objects) → DAT mappings
 ```

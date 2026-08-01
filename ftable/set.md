@@ -35,22 +35,27 @@ The FTABLE entry value is computed as `(subdir << 7) | file`.
 
 ## What it writes
 
-By default `set` patches **two table pairs**, both with version byte `N`:
+By default `set` **dual-writes** the same mapping to **two table pairs**, both with
+version byte `N`:
 
-1. **Base** `FTABLE.DAT` / `VTABLE.DAT` — the in-memory *master* the client builds at
-   boot and actually consults at file-open time. This is the load-bearing write: it
-   routes the file_id even on clients that don't merge `ROM{N}` as an overlay.
+1. **Base** `FTABLE.DAT` / `VTABLE.DAT` — always patched (unless `--no-base`).
 2. **Overlay** `ROM{N}/FTABLE{N}.DAT` / `VTABLE{N}.DAT` — the per-ROM expansion table,
-   merged into the master at boot (only if the client scans that far). Kept in sync so
-   the namespace is self-describing and survives a base-table restore.
+   kept in step with the base so the namespace stays self-describing.
 
 `--no-base` writes only the overlay. When `--rom 1`, the overlay *is* the base table, so
 only one pair is written.
 
-> The client merges `ROM2…ROM{MAX}` overlays onto the base master at startup, where an
-> overlay entry wins only where its VTABLE byte equals its own ROM index. At file-open
-> only the merged master is read — the version byte becomes the `ROM{N}` folder in the
-> path. See [reference/model-file-ids.md](../reference/model-file-ids.md).
+> **Not “base is master, the client merges.”** The live client is **volume-direct**: the
+> VTABLE byte names which ROM volume to open (`1` → `ROM/`, `N` → `ROM{N}/`). Overlay
+> entries **shadow** the base rather than OR-merge into one master table. (xim /
+> `dump_event.py` still use a combine model — that is not the live client.)
+>
+> When **XIPivot** is present (`FFXI_PIVOT_DIR`), its tables can **shadow** the base
+> install’s copies entirely. After bulk registrations (e.g. `cexi dats build`),
+> `sync_pivot_from_base()` copies the custom region into any pivot tables so sizes stay
+> uniform and new file_ids resolve. A lone `ftable set` only patches the base install
+> path — re-sync or expand if the pivot is out of date. See [expand.md](expand.md) and
+> [reference/model-file-ids.md](../reference/model-file-ids.md).
 
 ---
 
@@ -84,11 +89,11 @@ uv run cexi ftable set --file-id 102755 --rom 10 --subdir 10 --file 1
   DAT on disk  : YES
 
   Write overlay: ROM10/FTABLE10.DAT
-  Write base   : FTABLE.DAT + VTABLE.DAT  (master, version byte 10)
+  Write base   : FTABLE.DAT + VTABLE.DAT  (version byte 10)
 ============================================================
 
 [+] ROM10/FTABLE10.DAT patched (FTABLE @ 0x322C6, VTABLE @ 0x19163)
-[+] FTABLE.DAT + VTABLE.DAT patched (master, version byte 10)
+[+] FTABLE.DAT + VTABLE.DAT patched (version byte 10)
 
 [*] Done.
 ```

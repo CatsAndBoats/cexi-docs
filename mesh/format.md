@@ -20,7 +20,10 @@ DAT = a sequence of 16-byte-aligned sections. Each section header is 16 bytes:
 
 ```
 0x00  4   section id (4 chars, e.g. 'hf_b')
-0x04  4   packed meta: bits 0–6 = type, bits 7–26 = size in 16-byte units
+0x04  4   packed meta:
+            bits 0–6  = type
+            bits 7–25 = size in 16-byte units (19-bit, mask 0x7FFFF)
+            bit  26   = is_shadow
 0x08  8   zero
 ```
 

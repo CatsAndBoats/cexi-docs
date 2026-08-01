@@ -68,16 +68,14 @@ Wrote: <output DAT path>
   order (`DAT(x,y,z) = Ashita(X, Z, Y)`).
 - **Coordinates: `−Y` is UP** (FFXI is Y-down). The fountain jets sit at `y=−7.2`; a
   positive `y` buries an effect underground. Move things up by going *more negative*.
-- **Spawning is effect-dependent:**
+- **Spawning with full deps:**
   - Effects are enumerated sequentially, so same-DAT copies and native effects spawn.
-  - **Ambient zone effects** (Castle Zvahl always-lit torches `la*`/`lb*`) transplant
-    and **render** as standalone effects. *Verified*: a Castle Zvahl torch renders as a
-    standalone fire at the Lower Jeuno fountain.
-  - **Boss/ability effects** that are trigger-gated by a `0x07` scheduler may not
-    auto-spawn when transplanted. Two fixes: copy with `--replace` onto a spawning
-    slot, or set the autoRun flag afterward with [`fx set --autorun`](set.md).
-    *Verified*: with its full dep set (`0x20`+`0x21`+`0x19`), the ROM/0/73 dungeon
-    flame `a133` transplants and renders at the fountain.
+  - **Full deps are enough for `autoRun=true` effects** — ambient *and* boss/ability
+    sources. *Verified*: ROM/0/73 dungeon flame `a133` (`autoRun=true`) and Castle
+    Zvahl torches both render at the Lower Jeuno fountain once `0x20`+`0x21`+`0x19`
+    come along.
+  - Only generators that are genuinely **`autoRun=false`** need `--replace` onto a
+    spawning slot or [`fx set --autorun`](set.md) afterward.
 - The earlier failure mode for transplants was a **missing dependency** (a missed
   `0x21` SpriteSheetMesh = nothing to draw), not the trigger layer. `fx copy --from`
   now brings the full `_DEP_TYPES` set (`0x20, 0x21, 0x1F, 0x19, 0x2E`), including the

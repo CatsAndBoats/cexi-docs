@@ -28,7 +28,8 @@ Editor timeline (state.tracks)
 1. `_timeline_to_steps` walks all tracks' keyframes in frame order, mapping each via
    `_kf_to_step(kind, cast_id, kf)` and inserting **wait steps for the frame gaps between
    keyframes** (`_MIN_WAIT_FRAMES`). Steps at the same frame are ordered by `_STEP_PRIORITY`
-   (setup ops = 0 fire before a blocking `say` = 1).
+   (show/hide = 0, place = 1, camera/face/music/fade/anim = 2, blocking `say`/`narrate`/`wait`
+   = 10; the ≥10 threshold also flushes the deferred fade-in — that's why `say` sits at 10).
 2. `STEP_DISPATCH[op]` emits the opcodes for each step.
 
 ### Dialogue + gestures — `0x5B sched_ext`
@@ -105,8 +106,11 @@ rare. `_lower_camera_track` turns the camera track into route specs:
 - **Linear** (`spline`) → 2-point route (a straight glide from the previous pose). *Two points
   are a straight line regardless of interpMode.*
 - **Curved** (`curved`) → a run of consecutive curved keyframes (plus the preceding anchor) is
-  **chained into ONE `interpMode=1` route** so the client arcs *through* them. 3+ points give a
-  real curve; 2 stay a line.
+  **chained into ONE `interpMode=4` route** so the client arcs *through* them. 3+ points give a
+  real curve; 2 stay a line. (The compiler never emits mode 1: `xi_compile.py` promotes
+  `smooth=0` to 4 and takes `max(smooths) or 4` on multi-point routes — the "1 = most common
+  retail" note above is a decode-side observation; see `events/camera_scene_ids.md` for the
+  dispute.)
 
 ☠ **The format stores only the interpMode + point list — there are NO per-point tangent
 handles.** Draggable bezier handles that persist to the game are impossible. Reduce overshoot
@@ -139,7 +143,8 @@ Position / Anim sub-tracks carrying a castId), and flat Wait / Music / SFX / VFX
 
 - **Camera curve graph** (X/Y/Z eye + FOV) — toggle by clicking the CAMERA lane. `csSampleShot`
   drives BOTH the 3D viewport camera and the SVG graph; it uses **centripetal Catmull-Rom**
-  (`_csCatmull`, α=0.5) for `interpMode 1` multi-point shots — no overshoot/cusps at sharp turns.
+  (`_csCatmull`, α=0.5) for `interpMode 4` multi-point shots (the compiler's chained-route
+  mode) — no overshoot/cusps at sharp turns.
 - **Keyframe interactions:** drag to move; right-click for Edit / Delete (+ camera Snap/Linear/
   Curved interpolation switch); **shift-drag a marquee box** to multi-select across tracks, then
   right-click → "Delete N" or drag the group; **Delete/Backspace** removes the selection.

@@ -23,15 +23,15 @@ cexi produces it with this stack:
 
 ```
 cexi (Python)  ──ctypes──▶  cexi_navmesh.dll  ──links──▶  Recast + Detour (vendored)
-  xi_navmesh.py               our extern "C" wrapper        native/cexi-navmesh/
+  xi_navmesh.py               our extern "C" wrapper        misc/tools/cexi-navmesh/
 ```
 
 - **Recast** voxelizes the collision triangle soup and extracts walkable surface.
 - **Detour** turns that into navmesh tiles and is the on-disk format.
-- Our wrapper (`native/cexi-navmesh/cexi_navmesh.cpp`) runs the standard
+- Our wrapper (`misc/tools/cexi-navmesh/cexi_navmesh.cpp`) runs the standard
   RecastDemo "Tile Mesh" build and serializes the `NAVMESHSET`. It's our own code
   over a vendored, zlib-licensed copy of RecastNavigation; it does not link
-  FFXINAV. See [../../native/cexi-navmesh/README.md](../../native/cexi-navmesh/README.md).
+  FFXINAV. See [../../misc/tools/cexi-navmesh/README.md](../../misc/tools/cexi-navmesh/README.md).
 
 ---
 
@@ -40,7 +40,7 @@ cexi (Python)  ──ctypes──▶  cexi_navmesh.dll  ──links──▶  Re
 Needs a C++ toolchain (MSVC / clang / gcc) + CMake ≥ 3.15.
 
 ```sh
-cd native/cexi-navmesh
+cd misc/tools/cexi-navmesh
 cmake -B build
 cmake --build build --config Release
 ```

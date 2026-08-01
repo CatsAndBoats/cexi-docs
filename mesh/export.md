@@ -32,12 +32,12 @@ No animation **tracks** are written — this is the static mesh/skeleton path (u
 `anim export` for editable animation). By default the mesh is in its neutral
 **bind pose**; `--anim`/`--frame` can bake it into an animation pose (below).
 
-## Why both `.glb` and `.fbx`
+## Why `.glb` always, `.fbx` opt-in (`--fbx`)
 
-Cinema 4D's native glTF importer silently drops materials/textures, but it
-imports textures from FBX reliably. So we produce a texture-embedded `.fbx` by
-default (via Blender) for C4D users, and the `.glb` for Blender/other tools and
-as the portable single-file artifact.
+`.glb` is always written (Blender / portable single-file). Cinema 4D's native
+glTF importer silently drops materials/textures but imports textures from FBX
+reliably — pass **`--fbx`** to also emit a texture-embedded `.fbx` via Blender.
+FBX is **not** produced by default.
 
 ## Options
 
@@ -113,8 +113,9 @@ zone exporter shares the same `--alpha-scale` knob and default.)
 ## Section model
 
 The DAT is a sequence of 16-byte-aligned sections with packed metadata (low 7
-bits = type, next 20 bits = size in 16-byte units). Full mesh/texture binary
-layout: [format.md](format.md). Section types used here:
+bits = type, bits 7–25 = 19-bit size in 16-byte units / mask `0x7FFFF`, bit 26 =
+`is_shadow`). Full mesh/texture binary layout: [format.md](format.md). Section
+types used here:
 
 - `0x20` texture
 - `0x29` skeleton

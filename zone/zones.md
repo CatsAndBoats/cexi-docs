@@ -279,7 +279,7 @@ static copied list.
 | 220 | Ship bound for Selbina | ROM/1/24.DAT | ROM/25/29.DAT | ROM/27/29.DAT | ROM/21/29.DAT |
 | 227 | Ship bound for Selbina | ROM/1/29.DAT | ROM/25/36.DAT | ROM/27/36.DAT | ROM/21/36.DAT |
 | 268 | Sih Gates | ROM9/0/15.DAT | ROM9/5/113.DAT | ROM9/6/57.DAT | ROM9/5/65.DAT |
-| 283 | Silver Knife | — | — | — | — |
+| 283 | Silver Knife | ROM/374/94.DAT | — | — | — |
 | 76 | Silver Sea Remnants | ROM4/0/29.DAT | ROM4/1/21.DAT | ROM4/1/75.DAT | ROM4/0/81.DAT |
 | 59 | Silver Sea route to Al Zahbi | ROM4/0/12.DAT | ROM4/1/4.DAT | ROM4/1/58.DAT | ROM4/0/64.DAT |
 | 58 | Silver Sea route to Nashmau | ROM4/0/11.DAT | ROM4/1/3.DAT | ROM4/1/57.DAT | ROM4/0/63.DAT |
@@ -377,9 +377,16 @@ Re-derived from the **CatsEyeXI client** (2026-06) using the same method as `xim
 - **Names** — read from the zone-name string table `ROM/165/84.DAT` (a `d_msg` table,
   XOR mask `0xFF`), indexed by zone ID. The table has 300 entries (0–299). Format documented
   in [../dats/ROM_165_84.md](../dats/ROM_165_84.md).
-- **Model** — the merged FileTable. All nine `FTABLE*.DAT`/`VTABLE*.DAT` pairs are OR-combined
-  into one global index (exactly as xim does), then the main-area path is
+- **Model** — the FileTable. All nine `FTABLE*.DAT`/`VTABLE*.DAT` pairs are consulted,
+  each entry gated by its VTABLE version byte (xim models this as one OR-combined global
+  index; external byte evidence says the real client is volume-direct with overlay entries
+  shadowing the base — same resolution result for registered ids). The main-area path is
   `FileTable[0x64 + zoneId]` (zoneId < 0x100) or `FileTable[0x147B3 + (zoneId − 0x100)]`.
+  **The `≥ 0x100` branch is byte-verified (2026-08)**: for zones 256–301 it resolves every
+  named zone to the correct era volume (SoA → ROM9, Mog Garden → ROM/309, Escha → ROM/33x…),
+  with [U]-variant zones landing on same-size sibling DATs and Walk of Echoes [P1]/[P2]
+  resolving to the *same* DAT — a competing decompile-derived formula (`+0x144F7`,
+  threshold 600) resolves nothing in that band.
 - **Coverage** — every zone ID 0–301 resolves to a model that exists on disk. The table now
   lists all of them (added **298–301**, which the retail snapshot was missing).
 
@@ -406,7 +413,10 @@ for the actual client — SE/CatsEyeXI reused old empty slots and added custom c
   main-area model from the FileTable; it does not derive these from the zone ID. The values in
   those columns are the retail LSB/community convention and are kept as best-effort reference
   (`?` where the slot was repurposed and the original values are stale).
-- A few high/custom IDs resolve to the same model under the OR-merge (e.g. 133/189 → ROM9/0/22,
-  279/298 → ROM/361/85); this mirrors xim's own merge and may indicate shared geometry or a
-  table collision for those custom slots.
+- A few high/custom IDs resolve to the same model (e.g. 133/189 → ROM9/0/22,
+  279/298 → ROM/361/85). For 279/298 this is legitimately shared geometry (two phases of
+  Walk of Echoes); for the custom slots it may be a table collision.
+- **Client-variant caveat:** these tables were read from a **CatsEyeXI** install. Rows that
+  reflect CatsEyeXI-remapped slots (e.g. 133/189/229) and the custom `ROM/36x–37x` ranges are
+  client-variant — they may not hold on a clean retail install.
 - `283` (`Silver Knife`) does have a model (`ROM/374/94.DAT`); xim disables its bump-map only.

@@ -39,16 +39,23 @@ u32   blockSizes[blockCount]      # byte length of each actor block
 u32   actorId                     # server entity id (maps to a name via the Entity DAT)
 u32   eventCount
 u16   eventOffsets[eventCount]    # byte offset of each event's entry-point INTO sceneData
-u16   eventIds[eventCount]        # the event id at each offset (0xFFFF / 0xFFFE = sentinel/skip)
+u16   eventIds[eventCount]        # the event id at each offset (0xFFFF = placeholder, 0xFFFE = wildcard — see below)
 u32   refCount
 u32   references[refCount]        # ids the events reference (other actors / external data)
-i32   sceneSize                   # length of the bytecode that follows (padded up to a multiple of 4)
+i32   sceneSize                   # unpadded bytecode length; trailing pad may follow the scene blob
 u8    sceneData[sceneSize]        # the event BYTECODE for all of this actor's events
 ```
 
 - **`eventIds[i]` → `eventOffsets[i]`** is the lookup the engine uses: "run event N on
   actor A" finds `N` in `eventIds`, then begins executing at `sceneData[eventOffsets[i]]`.
-- `eventId` values `0xFFFF` / `0xFFFE` are **sentinels** — skipped, not real events.
+- `eventId` `0xFFFF` is a **placeholder id** on an otherwise-real entry offset — very common
+  (~130k instances across the retail zone corpus, most with distinct offsets); it can't be
+  requested by id, so per-id tooling skips it. `0xFFFE` is different: a **wildcard the engine
+  DISPATCHES** — it matches *any* requested event id (kept as a real match; see
+  `external_source/dump_event.py`). It clusters on the zone/master block (`0x7FFFFFF0`).
+  Byte census 2026-08: 129,845 × `0xFFFF` vs 337 × `0xFFFE`. Don't treat the two as one
+  "sentinel/skip" bucket — cexi's listing parser skips both, which is fine for listing but
+  not a model of engine dispatch.
 - `sceneData` is one shared bytecode buffer per actor; the per-event offsets carve it
   into individual scenes. Execution can fall through / jump across the buffer.
 - **`sceneSize` is the *unpadded* bytecode length** (it can be non-multiple-of-4). The block is
@@ -83,9 +90,9 @@ nor a file id — it's an *index indirection* through `references[]`.
 > The same indirection drives dialogue (`0x48 print_msg` → `references[i]` = a message id —
 > see [dialogue.md](dialogue.md)) and the scheduler/camera focus opcodes (`0x45` etc. — see
 > [cutscenes.md](cutscenes.md#how-the-camera-works)). cexi resolves it in
-> `src/cexi/event/xi_event.py` (`_resolve_work_selector` for the 2-byte form; `_getworkofs`
-> for the older single-signed-byte index form some print opcodes use). Selectors with the
-> high bit clear can't be resolved statically — they depend on VM run-time state.
+> `src/cexi/event/xi_event.py` via `_resolve_work_selector` (2-byte work-selector only —
+> including print opcodes). Selectors with the high bit clear can't be resolved statically
+> — they depend on VM run-time state.
 
 ---
 
@@ -122,12 +129,12 @@ Opcodes fall into a few families:
 | **Variables / flags** | `0x03` get→store, `0x05`/`0x06` set 1/0, `0x09`/`0x0A` set/clear bit, `0x0B`/`0x0C` inc/dec | scratch state & bit flags |
 | **Control flow** | `0x01` set exec-pointer, `0x02` `if` conditionals, `0x1A` jump, `0x1B` break jump, `0x3E` test-bit branch, `0x44` entity-valid branch, `0x21` **end event** | branching & termination |
 | **Dialogue / menus** | `0x1D`/`0x2B` print message (with speaker), `0x48`/`0x49` print (no speaker), `0x23` wait for player to dismiss, `0x24` open select menu, `0x25` wait for select, `0x40`/`0x41` set/test menu-option flags | see [dialogue.md](dialogue.md) |
-| **Entity / scheduler tasks** | `0x1C` load a `CMoSchedularTask` (entity action), `0x2D` zone task, `0x45` start task, `0x50`–`0x55` end / wait-for task | drive NPC animation & scripted action |
+| **Entity / scheduler tasks** | `0x2C` create a `CMoSchedularTask` (entity action, 13 bytes), `0x2D` zone task, `0x45` start task, `0x50`–`0x55` end / wait-for task | drive NPC animation & scripted action |
 | **Camera / player lock** | `0x20` lock player control, `0x38` `CliEventModeLocal` (hide entity, control camera, hide UI…), `0x46` enable/disable camera control + hide menus | cutscene presentation |
 | **Position / facing** | `0x1F`/`0x31`/`0x36`/`0x37` update event position, `0x39`/`0x3A`/`0x3B` directions/yaw, `0x47` send player position to server, `0x4A`/`0x4B` look-at / set yaw, `0x1E` look-at + "talking" mouth animation | move & orient actors |
 | **Doors / world** | `0x4C` open door, `0x4D` close door, `0x4E` hide flag, `0x4F` set StatusEvent, `0x34`/`0x35` load extra zone | scene world changes |
 | **Server sync** | `0x43` tell server the event updated / completed, `0x27`–`0x2A` `ReqSet`/`GetReqStatus` helpers | client↔server handshake |
-| **Timing / yield** | `0x57` frame delay, `0x1C` (alt) set wait-time, `0x26`/`0x58` yield the VM | pacing |
+| **Timing / yield** | `0x57` frame delay, `0x1C` wait_time (3 bytes), `0x26`/`0x58` yield the VM | pacing |
 
 > The **complete per-opcode table (0x00–0xD9)** is in **[opcodes.md](opcodes.md)**.
 > Atom0s's XiEvents documents the full opcode set (descriptions, argument layouts, and

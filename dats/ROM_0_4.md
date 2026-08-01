@@ -12,7 +12,7 @@ The first word of every record follows a deterministic address-like pattern also
 neighboring files `ROM/0/5.DAT` through `ROM/0/8.DAT`.
 
 Current best interpretation: this is precompiled low-level graphics/page data, likely related to
-boot or system UI rendering, not a texture sheet that can be edited with the regular `ui extract`
+boot or system UI rendering, not a texture sheet that can be edited with the regular `ui tex export`
 workflow.
 
 ---

@@ -8,8 +8,8 @@ uv run cexi --help
 ```
 
 **Adding prebuilt DATs at new model ids?** Use the interactive wizard:
-`uv run cexi dats new` — inject gear/mount/entity DATs into a reproducible
-`dats/builds/` pack ([docs](dats/README.md)).
+`uv run cexi dats new` — place gear/mount/entity DATs into the live install
+(`FFXI_DIR`) from a project manifest ([docs](dats/README.md)).
 
 **Client crashing after a publish?** See [common_crashes.md](common_crashes.md) —
 diagnosis guide for the recurring crashes (overlay tables shadowing a registration,
@@ -28,12 +28,14 @@ Manage the shared FTABLE/VTABLE model lookup tables — reserving space for cust
 **Start here:** custom entities go at modelid **15,000+**, custom gear at modelid
 **3,000+** (per race + slot). One command sets up both — see [ftable/expand.md](ftable/expand.md).
 
-- `uv run cexi ftable expand` ([docs](ftable/expand.md)) — One command: reserve space for BOTH custom entity + gear models (the buffers). `--no-gear` / `expand entity` / `expand gear` to do just one.
+- `uv run cexi ftable expand` ([docs](ftable/expand.md)) — One command: reserve space for BOTH custom entity + gear models (defaults: **entity 30000 + gear 4095**). `--no-gear` / `expand entity [N]` / `expand gear [N]` to do just one. `--no-pivot` only on bare expand / expand entity; gear always syncs pivot.
+- `uv run cexi ftable json` — Public JSON listing / table dump (`--tables`, `--models`, …)
 - `uv run cexi ftable json --tables` — Raw per-ROM table sizes and registration counts
 - `uv run cexi model json --free` ([docs](model/free.md)) — Show the custom model range and next free model id
-- `uv run cexi ftable lookup` ([docs](ftable/lookup.md)) — Resolve a file_id or modelid to a DAT path (`--table N`, prints header bytes + file size)
+- `uv run cexi ftable lookup --file-id N` ([docs](ftable/lookup.md)) — Resolve a file_id or modelid to a DAT path (`--table N`, prints header bytes + file size)
 - `uv run cexi ftable range-scan` ([docs](ftable/range-scan.md)) — Scan FTABLE for occupied file_id blocks
-- `uv run cexi ftable set` ([docs](ftable/set.md)) — Register an arbitrary file_id → `ROM{N}/<subdir>/<file>.DAT` (base + overlay); the low-level inverse of `delete`
+- `uv run cexi ftable compare` — Diff registered file_ids between two FTABLE roots
+- `uv run cexi ftable set` ([docs](ftable/set.md)) — Dual-write an arbitrary file_id → `ROM{N}/<subdir>/<file>.DAT` (base + overlay); the low-level inverse of `delete`
 - `uv run cexi ftable delete` ([docs](ftable/delete.md)) — Zero a custom entry (base + ROM10) by file_id or modelid
 - `uv run cexi ftable reset` — Restore tables from `.base` backups + remove injected gear (⚠️ reverts ALL custom registrations)
 
@@ -213,23 +215,22 @@ three route to the zone's dialog DAT and tell you which one.
 ## UI
 
 Extract DXT1 textures from FFXI UI container DAT files (`lobb` / `menu` format).
+Commands are under `cexi ui tex …` / `cexi ui layout …`.
 
-- `uv run cexi ui extract` ([docs](ui/extract.md)) — Extract all textures from a UI DAT as `.dds` files
-- `uv run cexi ui simple-extract` / `uv run cexi ui sx` — Extract a UI DAT to `exports/ui/...` and convert all DDS files to PNG
-- `uv run cexi ui simple-import` / `uv run cexi ui si` — Rebuild DDS files from edited PNGs in `exports/ui/...` and import them back into the DAT (`--all-themes` applies one edited window skin to all of `ROM/0/14..21`)
+- `uv run cexi ui tex export` ([docs](ui/export.md)) — Extract all textures from a UI DAT as `.dds` files
+- `uv run cexi ui tex sx` — Extract a UI DAT to `exports/ui/...` and convert all DDS files to PNG
+- `uv run cexi ui tex si` — Rebuild DDS files from edited PNGs in `exports/ui/...` and import them back into the DAT (`--all-themes` applies one edited window skin to all of `ROM/0/14..21`)
 
 Example Flow:
-- uv run cexi ui extract "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT" --output-dir "exports/ui/1"
+- uv run cexi ui tex export "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT" --output-dir "exports/ui/1"
 - uv run cexi utils dds2png "exports/ui/1" "exports/ui/1"
 - uv run cexi utils png2dds "exports/ui/1" "exports/ui/1"
-- uv run cexi ui import "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT" "exports/ui/1" --output-dat "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT"
+- uv run cexi ui tex import "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT" "exports/ui/1" --output-dat "D:\cexi\catseyexi-client\Game\FINAL FANTASY XI\ROM\0\1.DAT"
 
 Simplified flow:
-- `uv run cexi ui simple-extract "ROM\0\1.DAT"`
-- `uv run cexi ui sx "ROM\0\1.DAT"`
+- `uv run cexi ui tex sx "ROM\0\1.DAT"`
 - edit the PNG files in `exports/ui/0/1`
-- `uv run cexi ui simple-import "ROM\0\1.DAT"`
-- `uv run cexi ui si "ROM\0\1.DAT"`
+- `uv run cexi ui tex si "ROM\0\1.DAT"`
 
 
 #### Known DATs
@@ -286,9 +287,9 @@ UI textures, system files, cutscenes, zone maps, music, and more.
 
 Extract and re-import DXT-compressed textures from UI container DATs.
 
-- `uv run cexi ui extract` ([docs](ui/extract.md)) — Extract all textures from a UI DAT as `.dds` files
-- `uv run cexi ui import` ([docs](ui/import.md)) — Import edited `.dds` files from an extract folder back into a UI DAT
-- `uv run cexi ui sx` / `uv run cexi ui si` — Shortcut extract/edit/import flow using a DAT-derived `exports/ui/...` folder
+- `uv run cexi ui tex export` ([docs](ui/export.md)) — Extract all textures from a UI DAT as `.dds` files
+- `uv run cexi ui tex import` ([docs](ui/import.md)) — Import edited `.dds` files from an export folder back into a UI DAT
+- `uv run cexi ui tex sx` / `uv run cexi ui tex si` — Shortcut export/edit/import flow using a DAT-derived `exports/ui/...` folder
 
 ## Utils
 

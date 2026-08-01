@@ -132,7 +132,7 @@ The client never self-starts a story event — the **server** drives it (see
 ```lua
 -- server: zones/Southern_San_dOria/npcs/<NPC>.lua
 function onTrigger(player, npc)
-    player:startEvent(200)        -- the eventId we compiled into the Event DAT
+    player:startCutscene(200)     -- the eventId we compiled into the Event DAT
 end
 
 function onEventFinish(player, csid, option)
@@ -145,7 +145,9 @@ So the **end-to-end** for a custom cutscene is:
 1. **Client side** (this pipeline): compile the event bytecode + dialogue (+ camera) into
    the zone's Event/Dialog DATs at `eventId = N`.
 2. **Server side**: add/extend the NPC's Lua so something (`onTrigger`, a quest step, a
-   zone-in) calls `player:startEvent(N)`, and handle `onEventFinish` for branches.
+   zone-in) calls `player:startCutscene(N)`, and handle `onEventFinish` for branches.
+   (Use `startCutscene`, not `startEvent` — cutscenes need CUTSCENE mode / movement lock.
+   Plain dialogue can still use `startEvent` when appropriate.)
 3. Both must agree on **`N`** and the **actor** — that's the contract between client DAT
    and server script (the same split as spell visuals in
    [../fx/effect_system.md](../fx/effect_system.md#2-how-spells-are-named--resolved)).
@@ -185,7 +187,7 @@ So the **end-to-end** for a custom cutscene is:
 0x68 (show HUD) · 0x46 (restore) · 0x21 (end event)
 ```
 
-…and the server NPC does `player:startEvent(200)`.
+…and the server NPC does `player:startCutscene(200)`.
 
 ---
 
@@ -196,7 +198,7 @@ So the **end-to-end** for a custom cutscene is:
 | `cexi event cutscene export <zone>` | **shipped** | parse a zone's Event DAT → `.txt` disasm / `--json` (actors, eventIds, decoded bytecode, resolved `→ msg`/`→ zone`) — the inverse of compile, for learning from retail events |
 | `cexi event dialogue actors <zone>` | **shipped** | list a zone's actor ids + names → pick the NPC for `dialogue new` |
 | `cexi event dialogue new <zone> --json … --actor …` | **shipped** | append lines + synthesize a multi-line dialogue event → event id + Lua stub ([authoring.md](authoring.md)) |
-| `cexi event compile <cutscene.json> <zone>` | proposal | the full step compiler — splice a new/edited event + strings (+ camera/menus/branches) into the zone DATs, keep `<dat>.base` |
+| `cexi event cutscene compile <cutscene.json> --event-dat <path> [--dialog-dat <path>] [--dry-run]` | **shipped** | the full step compiler — splice a new/edited event + strings (+ camera/menus/branches) into the zone DATs, keep `<dat>.base`. `--event-dat` required; `--dialog-dat` auto-derived from `/21/`→`/25/` when possible |
 
 **Build order that de-risked it (followed):** `export` **first** (read-only; validated the
 format against retail), then a *byte-exact event-DAT round-trip*
@@ -215,7 +217,8 @@ same crawl-walk-run the `fx` tooling followed (list → dump → edit → copy).
   holding `0x07` **EffectRoutine** shots (`sNNN`), each paired with a `0x06` **Route**
   (`cNNN`) = eye/look-at/FOV keyframe spline (`parse_camera_routes`; see
   [cutscenes.md](cutscenes.md#how-the-camera-works)). The **full keyframe layout is now
-  decoded** (eye, **FOV** in decidegrees, look-at, **roll** in radians, time + pad; a
+  decoded** (eye, **focal length** — `FOV = 2·atan2(192, focal)`, not decidegrees as older
+  notes said — look-at, **roll** in radians, time + pad; a
   per-Route smoothing **mode** enum `0..4` at header `+0x14`), so the compiler can emit
   real camera Routes. The **only** piece still open is which easing curve each `mode` value
   applies (xiclient's 5 `CameraSmoothType` names are the candidates), so keep the
@@ -226,8 +229,9 @@ same crawl-walk-run the `fx` tooling followed (list → dump → edit → copy).
   likely yes).
 - **Event-id allocation** — find a free `eventId` per actor without colliding with
   retail events; `event dump` makes this auditable.
-- **Server coupling** — a client-only event does nothing without a server `startEvent`;
-  the doc/tooling should emit the matching Lua stub through the `cexi dats` package resources.
+- **Server coupling** — a client-only event does nothing without a server `startCutscene`
+  (or `startEvent` for non-cutscene dialogue); the doc/tooling should emit the matching Lua
+  stub through the `cexi dats` package resources.
 
 ---
 

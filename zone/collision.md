@@ -93,15 +93,18 @@ uv run cexi zone import ROM/1/41 --add-collision blocker.obj
 
 Appends the triangles in `blocker.obj` as **new collision blockers**, keeping
 all existing collision untouched. No GLB model is needed — this flag can be
-used standalone.
+used standalone (layers on the current DAT). Combined with a GLB on the same
+invocation (`zone import model.glb --add-collision blocker.obj`), collision runs
+**after** the GLB path so blockers are not wiped by the `.base` reset — see
+[import.md](import.md#cli).
 
 ### Authoring workflow
 
 1. Export the collision mesh (see above) — opens in Blender alongside the zone
    `.glb` in the exact same world frame.
-2. Model new geometry over the exported collision in the same `(-x, -y, z)` frame.
-   A **single plane is fine** — wall (`col_wall_*`) faces are emitted
-   **double-sided** automatically, so they block from any approach and you don't
+   2. Model new geometry over the exported collision in the same `(-x, -y, z)` frame.
+   A **single plane is fine** — every face (walls **and** floors) is emitted
+   **double-sided** automatically, so walls block from any approach and you don't
    need to worry about which way the normal faces or build a closed box. Make
    walls **tall enough to cover the player's height** (real walls are ~3-11 yalms
    tall) so the collision sphere can't step or hop over.
@@ -118,12 +121,13 @@ given, so you can pass just a filename — `--add-collision blocker.obj` finds
 
 ### Camera transparency (default) vs `--camera-block`
 
-By default an added blocker is **camera-transparent**: it stops the player but
-the camera passes through it (no pull-in), like FFXI's visible walls — so an
-invisible barrier doesn't make the camera lurch for no on-screen reason. Pass
-`--camera-block` to also block the camera (like FFXI's invisible event/zone-line
-barriers, which do pull the camera in). Either way the **player is always
-blocked**; this only changes the camera/line-of-sight ray.
+By default added **wall** blockers are **camera-transparent**: they stop the
+player but the camera passes through (no pull-in), like FFXI's visible walls —
+so an invisible barrier doesn't make the camera lurch for no on-screen reason.
+Pass `--camera-block` to also block the camera on walls (like FFXI's invisible
+event/zone-line barriers). **Floor** faces always get `flags=0` (camera-blocking,
+like the ground) regardless. Either way the **player is always blocked**; this
+only changes the camera/line-of-sight ray on walls.
 
 Edits the zone DAT in place — layered on any existing edits, with a `.base`
 backup taken on first edit. **Re-running appends again** — run
@@ -192,30 +196,44 @@ confirmed in-game.
   retail client skips the object entirely unless the player's Y overlaps it
   (`CollisionManager.cpp` `if (obj->minY <= playerMaxY && obj->maxY >= playerMinY)`).
   A zeroed record (`minY=maxY=0`) is culled everywhere except world-Y≈0, so an
-  appended blocker silently fails to block. `--add-collision` writes a wide AABB
-  (`±1e6`) plus an identity normal matrix at `+0x80` so the blocker always
-  survives the cull and reports correct hit normals. (xim has no such cull, which
-  is why a structurally-valid blocker can pass tooling tests yet not block in
-  retail.) Collision query is driven by grid-cell → group → (object, mesh); it is
-  not tied to placement objects, and the `+0x18` count is unused at runtime.
+  appended blocker silently fails to block. `--add-collision` writes a **finite**
+  Y AABB = the authored geometry's own Y extent ± `_CULL_MARGIN` (50 yalms), plus
+  an identity 3×3 matrix at `+0x80` (the tail's leading 36-byte field — writing
+  identity yields correct hit normals in-game, so "normal matrix" is the working
+  interpretation; the field itself is unconfirmed — same record tail as
+  [format.md](format.md)'s collision-transform entry). **Not ±1e6**: the
+  camera-collision / vertical-clamp query does arithmetic with this AABB, and an
+  extreme bound crashes the client the moment the camera tests a (camera-blocking)
+  floor — player-walk cull is only a comparison so it would be fine, but the
+  camera path chokes. A finite bracket still always survives the cull where the
+  geometry is. (xim has no such cull, which is why a structurally-valid blocker
+  can pass tooling tests yet not block in retail.) Collision *query* is driven by
+  grid-cell → group → (object, mesh) and is not tied to placement objects — the
+  `+0x18` `indexCount` is unused for those queries. It **is** used as the length
+  of the per-placement collision-transform / cull array (mirrors `nodeCount`; see
+  [format.md](format.md) and `xi_zonedef`), so growing placements must grow that
+  array too.
 - **Camera/LoS transparency is a separate flag.** The camera radius pull-in (and
   client line-of-sight) ray skips a triangle only when its mesh's
   `CollisionMeshHeader.Flags != 0` **and** the triangle's third index word has bit
   `0x4000` set (`CollisionQuery.hpp` `DoubleSidedSkipPolicy`). Player movement is
   independent — it keys off the *second* index word's `0x4000` bit, so camera
   transparency never affects blocking. In cexi's encoding the third-word `0x4000`
-  bit coincides with `hitWall`, so the only lever is the per-mesh flag: `flags=1`
-  → camera passes through, `flags=0` → camera blocks. `--add-collision` sets
-  `flags=1` (transparent) by default; `--camera-block` sets `flags=0`.
-- **Collision is one-sided.** The client's sphere-vs-plane test only blocks when
-  the player is on the side the triangle's stored **normal** points toward
-  (verified in xim `Collider.kt` — one-sided `RayPlaneCollider`; the winding is
-  normalized to the normal, so the normal alone decides). Real game walls store
-  their normal toward the *walkable* side, and solid walls are backed by a second
-  face a few yalms behind. `--add-collision` emits `col_wall_*` faces
-  **double-sided** (a back-to-back normal pair) so a user blocker stops the
-  player from every approach without manual normal orientation. Floors keep a
-  single up-facing (negative-FFXI-Y) normal.
+  bit coincides with `hitWall`, so the lever is the per-mesh flag.
+  `--add-collision` segregates walls and floors into separate meshes: **wall**
+  meshes get `flags=1` (camera-transparent) by default or `flags=0` with
+  `--camera-block`; **floor** meshes are always `flags=0` (camera-blocking, like
+  the ground).
+- **Collision is one-sided at the plane test, but cexi always emits double-sided
+  pairs.** The client's sphere-vs-plane test only blocks when the player is on the
+  side the triangle's stored **normal** points toward (verified in xim
+  `Collider.kt` — one-sided `RayPlaneCollider`; the winding is normalized to the
+  normal, so the normal alone decides). Real game walls store their normal toward
+  the *walkable* side, and solid walls are backed by a second face a few yalms
+  behind. `--add-collision` emits **every** face (walls **and** floors) as a
+  back-to-back normal pair — a single-sided collision tri crashes this client
+  (verified in-game on floors). Floors orient the primary normal up first
+  (negative FFXI-Y) so the standable side is unambiguous, then add the back face.
 - Codec: `src/cexi/zone/xi_collision.py` — `parse_collision_raw` /
   `serialize_collision_raw` / `roundtrip_check` (byte-exact verified on 95
   real zone models).

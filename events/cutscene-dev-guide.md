@@ -72,14 +72,16 @@ Event DAT (5820 + zone_id)
 **`0xBA` `calibrate_entity_position`** sets an NPC's stage position before the scene
 starts. It is NOT set_pos (0x36/0x37) — those move NPCs _during_ the scene.
 
-Operand layout (4 selectors → `references[]` as signed int / 1000):
+Operand layout (4 selectors → `references[]`):
 
 ```
 entity u32 | X selector | Z selector | Y selector | dir selector
 ```
 
+- **X / Z / Y** — signed int / 1000 → world units
+- **dir** — raw signed units → radians via `× 2π/4096` (4096 units per full turn). **Not** ×1000.
+
 > ⚠️ Axis order is **X, Z, Y** — Z and Y are swapped relative to what you'd expect.
-> `dir` is in radians (approximately), FFXI world heading.
 
 **Code**: `event_entity_positions()` in `xi_event.py`. The first `0xBA` per entity is
 the initial stage position. `_cutscene_actors()` in the bridge prefers this over the
@@ -124,12 +126,13 @@ Up to 8 gear meshes merged onto the race skeleton into ONE rigged GLB by
 
 ### Standard NPCs (type 0 — monsters, unique named NPCs like Iroha)
 
-Model ID → DAT via `model_file_id(model_id)` (xim-verified formula):
+Model ID → DAT via `modelid_to_file_id(model_id)` (`entity/xi_core.py` `RANGES`; see
+[model-file-ids.md](../reference/model-file-ids.md)):
 ```python
-model_id < 1500  → +1300   (0x514)
-model_id < 3000  → +50295  (0xC477)
-model_id < 3193  → +96907  (0x17A8B)
-else             → +98546  (0x180F2)
+(0,    1499, +1300)    # 0x514
+(1500, 2999, +50295)   # 0xC477
+(3000, 3499, +96907)   # 0x17A8B
+(3500+,      +98239)   # 0x17FBF  (MODEL_FILE_OFFSET; not +98546)
 ```
 
 All named `0x2A` PART sections in the model DAT are merged (deduped by name):

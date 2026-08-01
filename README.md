@@ -5,7 +5,7 @@ DAT files, animation, zone mesh, event bytecode, audio, visual effects, and more
 
 Produced alongside reverse-engineering work on private server modding. Covers the
 **retail FFXI client** (PC, PlayOnline era). Format notes are cross-referenced
-against the [xim](https://github.com/atom0s/XiEvents) Kotlin client reimplementation
+against the [xim](https://www.ffxiah.com/forum/topic/58758/xim-browser-based-client-simulator) Kotlin client reimplementation
 and a UE5 engine port where they confirm or clarify format details.
 
 > **Note:** AI was used extensively in the research and generation of these docs.
@@ -215,12 +215,14 @@ DAT format, and the owned-only display gate.
 ## UI Textures
 
 DXT1/3/5 textures packed into FFXI UI container DATs (`lobb` / `menu` format).
+Commands live under `cexi ui tex …` and `cexi ui layout …`.
 
 | Doc | Summary |
 |-----|---------|
-| [ui/extract.md](ui/extract.md) | Extracting textures from a UI DAT |
-| [ui/import.md](ui/import.md) | Re-importing edited textures |
-| [ui/list.md](ui/list.md) | Listing textures in a UI DAT |
+| [ui/export.md](ui/export.md) | `cexi ui tex export` / `sx` — extract textures from a UI DAT |
+| [ui/import.md](ui/import.md) | `cexi ui tex import` / `si` — re-import edited textures |
+| [ui/list.md](ui/list.md) | `cexi ui tex list` — list UI DATs by magic |
+| [ui/extract.md](ui/extract.md) | Redirect — there is no `extract` command |
 | [utils/texture.md](utils/texture.md) | DDS ↔ PNG conversion helpers |
 
 ---
@@ -293,20 +295,6 @@ searching the decompressed binary for gear/model formula constants.
 | [dats/research/search_model_formula.py](dats/research/search_model_formula.py) | Search decompressed binary for monster modelid formula constants |
 | [dats/research/texture_convert.py](dats/research/texture_convert.py) | Texture conversion helper |
 | [dats/research/header_summary.json](dats/research/header_summary.json) | Aggregated DAT header scan results |
-
----
-
-## Thank You
-
-This work builds on the research and tooling of many people in the FFXI modding and reverse-engineering community.
-
-- **[XIClient](https://gitlab.com/Aenge/XIClient)** by Aenge — custom FFXI client; an invaluable reference for client behaviour and DAT handling.
-- **[XIM / Ximtool](https://www.ffxiah.com/forum/topic/58758/xim-browser-based-client-simulator)** by Aamace — browser-based FFXI viewer and resource tooling; a major source of format knowledge used throughout these docs.
-- **Shozo** — UE5 research and prototyping that informed the zone and model pipeline work.
-- **[AltanaViewer](https://github.com/Voliathon/AltanaViewer)** by Voliathon — FFXI audio player and format reference.
-- **FFXI Model Viewer** (mogbelt) — early Japanese community tool for viewing FFXI DAT models; one of the first public explorations of the mesh format.
-- **Xeno** (xenonsmurf) — collection of FFXI tools including DAT parsers, Ashita plugins, and the navmesh builder.
-- **[Shining Fantasia](https://gitlab.com/Velyn/ShiningFantasia)** by Velyn — FFXI research and documentation.
 
 ---
 

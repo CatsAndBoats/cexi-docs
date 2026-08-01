@@ -76,10 +76,13 @@ After running `cexi ftable expand`, pass `--max-entries` to see your custom
 ROM10 entries included:
 
 ```
-uv run cexi ftable range-scan --max-entries 118240
+uv run cexi ftable range-scan --max-entries 128240   # entity expand default ceiling
+# after `ftable expand` (entity+gear): use `cexi ftable json --tables` for live size
 ```
 
-Note: this scans the base `FTABLE.DAT` only — it will show empty slots for
-custom file_ids unless those were also written there. Custom entries live
-exclusively in `FTABLE10.DAT`; use `cexi monster list` to see all registered
-custom models across all ROM tables.
+
+Note: this scans the base `FTABLE.DAT` only. Custom entity/gear entries are
+**dual-written** to the base tables **and** the ROM10 overlay (`FTABLE10.DAT` /
+`VTABLE10.DAT`) — not exclusively FTABLE10 — so expanded base scans will show
+them when present. To list models across the registry, use
+`cexi model json` or `cexi ftable json --models`.

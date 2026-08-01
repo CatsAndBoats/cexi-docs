@@ -79,7 +79,7 @@ Then add content through the package workflow:
 
 ```
 uv run cexi dats prepare workspaces/foo/import.json dats/update.json --type mesh
-uv run cexi dats plan dats/update.json
+uv run cexi dats build dats/update.json --dry-run
 uv run cexi dats build dats/update.json
 ```
 
@@ -120,7 +120,15 @@ Flags on the unified command:
 | `--dry-run` | off | Print the plan, write nothing |
 | `--debug` / `-v` | off | Timed per-step diagnostics (spot slow disk I/O) |
 | `--force` | off | Re-run gear setup even if it's already been done |
-| `--pivot` / `--no-pivot` | **on** | Also grow the pivot/override pack tables (`FFXI_PIVOT_DIR`) to match |
+| `--pivot` / `--no-pivot` | **on** | Also sync/grow the pivot/override pack tables (`FFXI_PIVOT_DIR`) to match |
+
+**`--pivot` / `--no-pivot` apply only to bare `expand` and `expand entity`.** The gear
+path (`expand gear`, and the gear half of bare `expand`) **always** runs
+`sync_pivot_from_base()` when a pivot root is configured — there is no `--no-pivot` on
+`expand gear`.
+
+Default ceilings (config): **entity modelid 30000** + **gear modelid 4095** per slot
+(`cexi ftable expand` → entity 30000 + gear 4095).
 
 Gear's table size is always larger than the entity buffer, so the unified
 command grows once to the gear target — which provisions the entity band for
@@ -130,10 +138,15 @@ free — and then writes the gear pointers.
 
 ## Every table must be the same size (why `--pivot` exists)
 
-The client doesn't read one FTABLE — it **OR-merges every FTABLE/VTABLE it can
-find into a single in-memory table**, looping over each file's length. If any
-table is **larger** than the first one loaded, the merge writes past the end of
-the buffer and the **game crashes on load**.
+The client doesn't read one FTABLE — it loads **every FTABLE/VTABLE pair it can
+find**, looping over each file's length. (Earlier revisions described this as an
+xim-style **OR-merge** into one combined table; external byte evidence — 2026-06-24,
+adjudicated via ~33 file-ids present in more than one volume — says the real client
+is **volume-direct**: the VTABLE byte names the ROM volume to read, and overlay
+entries **shadow** the base rather than OR into it. The combine model lives on only
+in xim/`dump_event.py`.) Either way the load loop runs over table length, so if any
+table is **larger** than the first one loaded, the pass writes past the end of the
+buffer and the **game crashes on load**.
 
 So the hard rule: **every lookup table the client loads must be byte-for-byte the
 same size.** That includes two places:

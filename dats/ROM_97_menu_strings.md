@@ -7,7 +7,7 @@ menu strings": they are plain text in `ROM/97/41.DAT`, not in `FFXiMain.dll`.
 
 The DLL only contains the generic plumbing that opens a menu *by name* (`"menu    missionm"`,
 referenced once at code VA `0x1014e8a4 → call 0x1015e260`). The menu's **layout/rows** live in
-`ROM/0/1.DAT` (section tag `mis2`, name `missionm`; see [`cexi ui menu-pos`](../../src/cexi/ui/xi_menu_pos.py)),
+`ROM/0/1.DAT` (section tag `mis2`, name `missionm`; see [`cexi ui layout menu-pos`](../../src/cexi/ui/xi_menu_pos.py)),
 and each row's **label** is one of these `XISTRING` entries.
 
 ---

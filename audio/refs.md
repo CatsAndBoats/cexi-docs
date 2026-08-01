@@ -35,8 +35,10 @@ folder = id // 1000  -> se{folder:03d}      file = id -> se{id:06d}.spw
 
 cexi reuses the generic DAT section walker
 ([`parse_sections`](../../src/cexi/entity/anim/xi_export.py): 16-byte header,
-`type = meta & 0x7F`, `size = ((meta >> 7) & 0xFFFFF) * 0x10`,
-`data_start = start + 0x10`).
+`type = meta & 0x7F`, `size = ((meta >> 7) & 0x7FFFF) * 0x10` on write —
+**19-bit** size field, mask `0x7FFFF`; some readers still use a wider mask under
+the 8 MiB ceiling),
+`data_start = start + 0x10`). See [`xi_section.py`](../../src/cexi/common/xi_section.py).
 
 ## Where the sounds are
 
@@ -91,16 +93,25 @@ Resolved from the bundled Windower pol-utils metadata
 - **`title`** — a per-sound name where pol-utils provided one (partial; system /
   menu sounds and some categories).
 
-## From a spell *name* to its sounds (not yet wired)
+## From a spell *name* to its sounds
 
-A spell's effect lives in its own DAT, located via an animation table:
-`fileId = SpellAnimationTable.fileTableOffset + spellIndex` (xim reference;
-abilities use the `0x53` AbilityList, spells the `0x49` SpellList). cexi does not
-yet map a spell *name* → its effect DAT, so for now resolve the effect DAT yourself
-and point `refs` at it — it will list every sound that effect plays.
+A spell's effect lives in its own DAT. Resolution (see [../fx/spells.md](../fx/spells.md)):
+
+```
+animationIndex = SpellAnimationTable[spellIndex]   # server / LSB spell_list → bundled table
+fileId         = 0xAF0 + animationIndex            # NOT spellIndex directly
+datPath        = FileTable[fileId]                 # e.g. ROM/x/y.DAT
+```
+
+cexi maps spell name/index → effect DAT via `spell_catalog()` /
+`resolve_spell_dat_rel()` in [`cexi.spell`](../../src/cexi/spell/xi_spell.py)
+(`FILE_TABLE_OFFSET = 0xAF0`). The editor also exposes this as the zone spell list
+(`zone.spellList` / Spells browser). Point `audio refs` at the resolved DAT to list
+every sound that effect plays.
 
 ## See also
 
 - [format.md](format.md) — the `.bgw`/`.spw` binary format and codec
 - [README.md](README.md) — the full `cexi audio` command set
+- [../fx/spells.md](../fx/spells.md) — spell → animation DAT resolution
 - [../sounds/footsteps.md](../sounds/footsteps.md) — the footstep half of the sound system

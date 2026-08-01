@@ -44,12 +44,13 @@ Effects are a header region of fixed fields + an **offset table** pointing into 
 **tagged opcode/parameter stream**. Annotated layout of a `tki` (size 0x1D0):
 
 ```
-+0x10  zeros (0x20 bytes)
++0x10  attachFlags u16 / additionalAttachFlags u16 / scale amounts
+       (looks like zeros on many ambient effects; NOT a free zero pad — see header table)
 +0x30  uint32   runtime pointer (absolute addr, fixed up at load; ~0x01a2e310)
 +0x40  float[8] all 1.0          — base color/scale params (RGBA / size)
 +0x60  uint32   runtime pointer  (~0x01b8af90)
-+0x74  uint16   count (5)        — ties to the 5-block layout / sub-element count
-+0x80  uint32[] offset table     0x90, 0xC0, 0x180, 0x1C0  (offsets into this section)
++0x74  uint16   emissionVariance — (early notes called this "count"; the real count u8 is @+0x78)
++0x80  uint32[] offset table     0x90, 0xC0, 0x180, 0x1C0  (offsets into this section; = data +0x70)
 +0x90  ...      tagged param stream begins
 ```
 
@@ -87,13 +88,13 @@ to this effect type** — re-derive per effect by diffing its instances.
 | +0xD4 / +0xD8 / +0xDC | (after `sibj` ref) | 3×f32 | **position** x / y / z | ✅ confirmed |
 | +0x134 / +0x138 / +0x13C | `0f04` @+0x130 | 3×f32 | **scale** (width, height, depth); jets ~(0.3–0.5, 1.5, 0.3–0.5) | ✅ confirmed (×4 → big tall columns in-game) |
 | +0x164..+0x167 | `0216` @+0x160 | 4×u8 | **color** B,G,R,A tint (jets ~`50 50 50 00` grey) | ✅ confirmed (set to `00 FF 00` → green spray in-game) |
-| +0x184 / +0x188 | `2e04` @+0x180 | 2×f32 | **draw distance** (near, far fade/cull); default (10, 15) | ✅ confirmed ((100,500) → spray visible from far) |
+| +0x184 / +0x188 | `2e04` @+0x180 | 2×f32 | ~~draw distance~~ **mislabeled** — xim says `2e04` is a texcoord keyframe; the real draw-distance knob is `0a04` GeneratorCull (see +0x94 row and the correction table below). cexi's `--range` writes only `0a04`. | ❌ retracted |
 | **+0x76** | — (header field) | u16 | **spawn interval** (frames between spawns); jets 39/44 | ✅ confirmed (240 → ~1.3s gaps; 2 → continuous gush) |
 | +0xF0 (.Y), +0x100 (.Y) | `02e4`, `0708` | f32 | **flow / texture-scroll speed** (Y component; how fast the texture streams up the mesh). NOT particle launch velocity | ✅ confirmed (×10 → texture whips past; 0.05× → slow stream) |
-| +0x74 | — (header field) | u16 | **particle count** (max alive); jets = 5 | candidate |
-| +0x94 | `0a04` @+0x90 | f32 | **LOD / cull draw-distance gate** (default 15); separate from the `2e04` fade — *both* must be high for the effect to draw far | ✅ confirmed (2e04 alone wasn't enough; raising 0a04 too → all jets visible from far) |
+| +0x74 | — (header field) | u16 | ~~particle count~~ **emissionVariance** (see correction table below; the count u8 is @+0x78) | ❌ superseded |
+| +0x94 | `0a04` @+0x90 | f32 | **draw distance** = GeneratorCull `maxEmitDistance` (default 15). This is the real range knob (`fx set --range`); `2e04` is unrelated (texcoord keyframe) | ✅ confirmed |
 | +0x11C, +0x128 | `0904` | f32 | **direction / tilt** (per-jet angle) | candidate |
-| +0x078 | — | f32 | per-jet toggle (0, or 2.0 on jets 4/5) | candidate |
+| +0x078 | — | ~~f32~~ | per-jet toggle reading is stale — +0x78 is the **u8 particlesPerEmission** and +0x79 the **u8 genFlags** (a 4-byte float here would span both plus moreFlags) | ❌ superseded |
 
 `@0x74`/`@0x76` are fixed header fields (u16); the float params (color/scale/range/
 flow/direction) are located by their opcode tag, so those edits work on any effect
@@ -101,8 +102,9 @@ that shares the format — header-field offsets may be more effect-specific.
 
 These params are located by their **opcode tag** (not fixed offset), so the same
 edit works on any effect sharing the format: color = tag `16 02` (+4 → BGRA),
-scale = tag `0f 04` (+4 → 3×f32), range = tag `2e 04` (+4 → near/far f32),
-position = the 3×f32 after the placed-mesh FourCC reference.
+scale = tag `0f 04` (+4 → 3×f32), range = tag `0a 04` GeneratorCull (+4 →
+`maxEmitDistance` f32; NEAR unused), position = the 3×f32 after the placed-mesh
+FourCC reference.
 
 Editing is a direct in-place byte write (`0x05` is unencrypted; no reimport). E.g.
 setting the 3 color bytes at each `tki`'s +0x164 to `00 FF 00` tinted the whole
@@ -125,20 +127,33 @@ xim's JS renderer draws these effects correctly, so its parser is ground truth:
 `ParticleGeneratorSettings.kt`, `ParticleGeneratorUpdaters.kt`). Comparing it to my
 byte-pattern reverse-engineering:
 
-### Real header layout (data-start relative)
+### Real header layout — MIND THE TWO FRAMES
 
-| off | field | notes |
-|-----|-------|-------|
-| +0x00 | `attachFlags` u16 | attachType (low 4 bits) + attachedJoint0 (bits 4-9) + attachedJoint1 (bits 10-15) — how it binds to a caster/joint |
-| +0x02 | `additionalAttachFlags` u16 | source-oriented; actor position/size scale targets |
-| +0x10 | `actorPositionScaleAmount` f32, +0x14 `actorSizeScaleAmount` f32 | |
-| +0x50 | `unkId` u32, +0x54 `environmentId` DatId | |
-| +0x74 | **`emissionVariance` u16** | (I mislabeled this as "count") |
-| +0x76 | **`framesPerEmission` u16 (+1)** | = spawn interval ✓ (note the +1: stored 39 → 40 frames) |
-| +0x78 | **`particlesPerEmission` u8** | the real "count" (I had the wrong offset) |
-| +0x79 | **`genFlags` u8** | bit `0x04` = continuousSingleton, **bit `0x10` = `autoRun`** |
-| +0x7B | `moreFlags` u8 | bit `0x20` = batched (weather) |
-| +0x80 | `section1..4Offset` 4× u32 | offsets to the four opcode sub-streams |
+⚠️ The rows below use **two different offset bases** (this table used to be labeled
+"data-start relative" as a whole, which is how the frames got conflated across docs).
+`data_start = section_start + 0x10`.
+
+**Data-start relative** (xim's parse frame — `ParticleGeneratorParser` reads these
+from the start of the section *data*):
+
+| off (data) | = off (section) | field | notes |
+|-----|-----|-------|-------|
+| +0x00 | +0x10 | `attachFlags` u16 | attachType (low 4 bits) + attachedJoint0 (bits 4-9) + attachedJoint1 (bits 10-15) — how it binds to a caster/joint |
+| +0x02 | +0x12 | `additionalAttachFlags` u16 | source-oriented; actor position/size scale targets |
+| +0x10 | +0x20 | `actorPositionScaleAmount` f32, +0x14 `actorSizeScaleAmount` f32 | |
+| +0x50 | +0x60 | `unkId` u32, +0x54 `environmentId` DatId | |
+
+**Section-start relative** (the emission group — this is the frame `cexi fx` reads and
+writes, and the `+0x76` interval is in-game A/B verified in this frame):
+
+| off (section) | = off (data) | field | notes |
+|-----|-----|-------|-------|
+| +0x74 | +0x64 | **`emissionVariance` u16** | (I mislabeled this as "count") |
+| +0x76 | +0x66 | **`framesPerEmission` u16 (+1)** | = spawn interval ✓ (note the +1: stored 39 → 40 frames) |
+| +0x78 | +0x68 | **`particlesPerEmission` u8** | the real "count" (I had the wrong offset) |
+| +0x79 | +0x69 | **`genFlags` u8** | bit `0x04` = continuousSingleton, **bit `0x10` = `autoRun`** |
+| +0x7B | +0x6B | `moreFlags` u8 | bit `0x20` = batched (weather) |
+| +0x80 | +0x70 | `section1..4Offset` 4× u32 | offsets to the four opcode sub-streams |
 
 ### The body is FOUR opcode sub-sections, not loose tags
 
@@ -166,15 +181,13 @@ Other useful opcodes (sec2 initializers unless noted): `0x10/0x11` scale varianc
 child generators, `0x58` point-light params, `0x4C` audio range; sec3 `0x48`
 `DoubleRangeDrawDistanceUpdater` (a second, per-particle draw-distance fade).
 
-### Actionable corrections for our tooling
+### Actionable corrections for our tooling — ALL IMPLEMENTED (kept for history)
 
-- `fx set --count` should write **`@0x78` (u8)**, not `@0x74`.
-- Add **`fx set --autorun`** (toggle `@0x79` bit `0x10`) — for effects that are
-  genuinely scheduler-triggered (`autoRun=false`). (Note: doesn't fix the dungeon
-  `a133` transplant, which already has `autoRun=true`.)
-- `--range`'s real knob is **`0a04` GeneratorCull `maxEmitDistance`** (we already
-  bump it); the `2e04` write is a no-op-ish texcoord keyframe and can be dropped.
-- Color/scale offsets we use are correct (they're opcodes 0x16/0x0F).
+- ✅ `fx set --count` writes **`@0x78` (u8)** (`_OFF_COUNT = 0x78`, `xi_core.py`).
+- ✅ `fx set --autorun` exists (toggles `@0x79` bit `0x10`, `xi_set.py`).
+- ✅ `--range` writes only **`0a04` GeneratorCull `maxEmitDistance`**; no `2e04`
+  write exists anywhere in the code.
+- ✅ Color/scale offsets are opcode-located (0x16/0x0F).
 
 ## How effects are triggered — `0x07` EffectRoutine
 
@@ -197,9 +210,9 @@ resources **by FourCC (DatId)**:
 | sec2 opcode | command | references |
 |-------------|---------|------------|
 | `0x02` | **ParticleGeneratorRoutine** — fire a `0x05` effect | generator FourCC |
-| `0x03`/`0x09`/`0x0A` | LinkedEffectRoutine — run another `0x07` | routine FourCC |
+| `0x03`/`0x09`/`0x3B`/`0x3C`/`0x57` | LinkedEffectRoutine — run another `0x07` | routine FourCC |
 | `0x05`/`0x06` | SkeletonAnimationRoutine | anim FourCC |
-| `0x0B`/`0x4A` | sound-effect emitter | sound |
+| `0x0A`/`0x0B`/`0x4A` | sound-effect emitter | sound |
 | `0x19` | SpellEffect | spell index |
 | `0x1E` | ParticleDampen | generator FourCC |
 
@@ -310,17 +323,21 @@ cexi fx delete ROM/1/41 tki awa grid    # strip the whole fountain effect set
 ### Effect type library (`src/cexi/fx/fx_library.json`)
 
 `fx json` annotates each effect with a human label from a curated registry,
-`src/cexi/fx/fx_library.json`. Match priority: exact `names` entry, then the **longest
-matching `prefixes`** entry. Entries carry `label`, `category`, `verified`, `notes`.
-A trailing `?` in the listing = `verified: false` (an educated guess from the
-FourCC name + xiclient hints, not confirmed); `(unidentified)` = no library match.
+`src/cexi/fx/fx_library.json` (`classify()` in `xi_core.py`). Entries carry
+`label`, `category`, `verified`, `notes`. A trailing `?` in the listing =
+`verified: false`; `(unidentified)` = no library match.
 
-**Classification signals**, best-first: (1) exact `names` entry; (2) the **mesh
-the effect places** (`meshes` map) — anything placing `ligh` is a light, `rnp#` a
-lamp post, `clod` a cloud, `sibj`/`awan`/`suim` the fountain; (3) the **texture it
-references** (`textures` map) — for **mesh-less sprite effects** that have no mesh,
-e.g. anything referencing the `fire` texture is fire; (4) longest `prefixes` match.
-A *verified* classification wins; a trailing `?` = tentative.
+**Classification** (verified mesh/tex/name wins; else name → mesh → tex):
+
+1. Build a **name** candidate: exact `names` hit, else longest matching `prefixes`
+   entry (prefixes feed the name signal, not a separate final step).
+2. Look up **mesh** (`meshes`) and **texture** (`textures`) candidates from what
+   the effect places/references.
+3. Among candidates with `verified: true`, pick the first of mesh → tex → name.
+4. Otherwise fall back: name → mesh → tex.
+
+So a verified mesh/texture label beats a tentative name/prefix guess; without any
+verified hit, the name (incl. prefix) wins over content signals.
 
 **Mesh-less sprite effects & their position.** Some effects place no mesh — they
 billboard a texture directly (e.g. ROM/0/73's dungeon torches: ~132 `a0NN` effects
@@ -355,26 +372,29 @@ DATs, bringing every dependency it references that the destination lacks — the
 `0x20` texture, the `0x21` SpriteSheetMesh, `0x19` ParticleKeyFrameData, and `0x2E`
 meshes (a name may map to several sections; all dep-typed ones are copied). Note it
 does **not** bring the `0x07` EffectRoutine that may trigger the effect.
-- **Spawning is effect-dependent.** Ambient *zone* effects (e.g. Castle Zvahl
-  always-lit torches `la*`/`lb*`) transplant and **render** as standalone placed
-  effects. **Boss/ability** effects (ROM/0/73 dungeon fire `a*`) are **trigger-
-  gated** by their `0x07` scheduler/event and do **not** auto-spawn when copied —
-  even with all deps and `--replace` onto a spawning slot. Use an ambient source.
+- **Full deps are enough for autoRun effects** — including boss/ability sources.
+  Verified in-game: `a133` from ROM/0/73 (`autoRun=true`, `attachType=None`)
+  renders at the Lower Jeuno fountain once `fire(0x20+0x21)` + `hiaa(0x19)` come
+  along (an earlier miss of `0x21` SpriteSheetMesh was the real failure, not the
+  trigger layer). See [Resolved](#resolved-why-the-dungeon-fire-a133-didnt-transplant).
+- Only generators that are genuinely **`autoRun=false`** need **`--replace`** onto
+  a spawning slot or `fx set --autorun` afterward.
 - The `+0x30`/`+0x60` body fields are runtime pointers; `+0x30` being zero does
   *not* gate spawning (ambient torches have it zero and still render).
-- Verified: a Castle Zvahl torch (`lb09` + `fire` 0x20/0x21 + `lirr/lirg/lirb/hiaa`
+- Also verified: a Castle Zvahl torch (`lb09` + `fire` 0x20/0x21 + `lirr/lirg/lirb/hiaa`
   0x19) injected at the Lower Jeuno fountain renders a standalone flame.
 
-This labels every effect that places a mesh (in Lower Jeuno: 78 lights, 68 lamp
-posts, clouds, windows, sea, sky…). **What it can't yet classify** are effects with
-no local mesh reference — pure particle/weather generators (`a###`, `b###`, `w###`,
+This labels every effect that places a mesh or texture (in Lower Jeuno: 78 lights,
+68 lamp posts, clouds, windows, sea, sky…; mesh-less sprites classify via the
+texture signal). **What it can't yet classify** are effects with **no mesh and no
+texture** reference — pure particle/weather generators (`a###`, `b###`, `w###`,
 `0N00`, `stk`, `gNNN`, point lights `pl`) — those need the element class decoded
 from the tagged opcode stream (future). The `0x05` body has no clean standalone
 "type byte": a light and a mesh-particle share the same header fields.
 
-The library is **hand-maintained** — extend `names`/`meshes`/`prefixes` as effects
-are identified (no code change). Verified so far: `tki`=water jet, `awa`=bubbles,
-`grid`/`suim`=water surface, `ligh`=light.
+The library is **hand-maintained** — extend `names`/`meshes`/`textures`/`prefixes`
+as effects are identified (no code change). Verified so far: `tki`=water jet,
+`awa`=bubbles, `grid`/`suim`=water surface, `ligh`=light.
 
 > Caveat: `fx delete` edits the DAT **in place** (does not reset to `.base`), so it
 > stacks on mesh-merge/placement edits. But `cexi zone import` rebuilds from `.base`

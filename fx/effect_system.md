@@ -35,7 +35,7 @@ them together.
         │   timed commands (delay, duration) reference resources by 4-char DatId:
         ├─ 0x05 ParticleGenerator   "fire", "tki5", …   (the emitters)
         ├─ 0x2B SkeletonAnimation                        (caster/target motion)
-        ├─ 0x3D/0x0B sound, 0x54 WeaponTrace, …
+        ├─ 0x3D sound (routine ops 0x0A/0x0B/…), 0x54 WeaponTrace, …
         └─ 0x03/0x09 LinkedEffectRoutine                 (chain another 0x07)
         ▼
   0x05 ParticleGenerator  emits particles; each particle is drawn with:
@@ -60,11 +60,14 @@ byte offset.
 ### Section header (16 bytes)
 ```
 0x00  4   DatId        4-char id / FourCC (e.g. "main", "fire", "tki5", "data")
-0x04  4   meta         type = meta & 0x7F ; size = ((meta >> 7) & 0xFFFFF) * 0x10
+0x04  4   meta         type = meta & 0x7F ; size = ((meta >> 7) & size_mask) * 0x10
 0x08  8   padding      (zeros) — data starts at section + 0x10
 ```
-`dataStart = sectionStart + 0x10`; the next section is at `sectionStart + size`
-(no gaps). xim: `DatParser.kt:128-160`.
+**Size field is 19 bits** (`size_mask = 0x7FFFF` on write — bits 7–25). Writers must
+use that mask (`cexi.common.xi_section`); overflowing into bit 26 corrupts `is_shadow`
+and the client reads the section 8 MiB short. Some readers still accept a wider mask
+under the 8 MiB ceiling. `dataStart = sectionStart + 0x10`; next section at
+`sectionStart + size` (no gaps). xim: `DatParser.kt:128-160`.
 
 ### Section types
 See [dat_sections.md](../reference/dat_sections.md) for the full code→name table. The ones that
@@ -153,14 +156,20 @@ sounds, etc. It's what a spell/ability points at.
 ### Command stream (each entry)
 ```
 u8   opCode
-u16  unkCombo        numInputs = (unkCombo & 0x1F) - 1   # dwords in this entry
+u16  unkCombo        size_dwords = max(1, unkCombo & 0x1F)   # entry length in dwords
 u8   unk0
 # sec2 only: next two fields are always
 u16  delay           # frames to wait before this command (accumulated)
 u16  duration        # frames the effect persists
 ... opcode-specific args (DatId refs are 4 bytes) ...
-# advance to startPos + numInputs*4 ; opCode 0x00 ends the section
+# advance by size_dwords * 4 bytes ; opCode 0x00 ends the section
 ```
+**Entry length = `(combo & 0x1F)` dwords (minimum 1), i.e. that × 4 bytes** — not
+`(combo & 0x1F) - 1`. cexi walks it this way
+(`xi_event.py` / `xi_schedule.py`: `n = combo & 0x1F; entry_len = max(1, n) * 4`).
+(xim's Kotlin parser subtracts 1 then advances by the remainder after already
+consuming the opcode dword — same on-disk stride, different framing.)
+
 Resource references are 4-char `DatId`s, resolved through the routine's local
 directory then parents (so a routine fires the `0x05`/`0x2B`/sound sections that sit
 beside it in the DAT). (`EffectRoutineParser.kt:62-135`, verified against bytes.)
@@ -178,7 +187,7 @@ The full ~85-opcode `when` is in `EffectRoutineParser.kt:96-540`.
 | 0x05 | SkeletonAnimationRoutine | DatId, 2×f32, transIn/out u16, maxLoop u16 | play a `0x2B` skeleton anim |
 | 0x07 / 0x59 | AnimationLock | — | lock animation for `duration` |
 | 0x09 | LinkedEffectRoutine (target) | DatId | run another `0x07` on the **target** |
-| 0x0B / 0x4A / 0x53 / 0x60 | SoundEffect | DatId, i32, far/near/unk f32 | play a `0x3D` sound (positioned / player-only / nearest / global) |
+| 0x0A / 0x0B / 0x4A / 0x53 / 0x60 | SoundEffect | DatId, i32, far/near/unk f32 | play a `0x3D` sound (`0x0A` source-pos, `0x0B` target-pos, plus player-only / nearest / global variants) |
 | 0x0C / 0x0D | Model Translation / Rotation | Vec3, idx | interpolate model pos/rot over `duration` |
 | 0x19 | SpellEffect | spellIndex u32 | trigger a nested spell animation |
 | 0x1E | ParticleDampen | DatId | stop+fade a generator |
@@ -208,10 +217,12 @@ Full deep-dive (header fields, the 4 opcode sub-sections, the `cexi fx` param ma
 in [effects.md](effects.md); the complete opcode name tables live in
 `src/cexi/fx/xi_opcodes.py` and are inspectable via `cexi fx json --opcodes`. Summary:
 
-- **Header** (data-start relative, except the `0x74+` group is section-start relative —
-  see effects.md): `attachFlags @+0x10`, scale amounts, environment id, and the
-  emission group `emissionVariance@0x74 / framesPerEmission@0x76 / particlesPerEmission@0x78 /
-  genFlags@0x79` (`autoRun` = bit `0x10`).
+- **Header** — two offset frames, stated per field (`data_start = section_start + 0x10`;
+  see effects.md for the full table): `attachFlags` @ **section+0x10 = data+0x00** (xim's
+  `offsetFromDataStart 0`), scale amounts and environment id in the data-start frame, and
+  the emission group in the **section-start** frame: `emissionVariance@sec+0x74 /
+  framesPerEmission@sec+0x76 / particlesPerEmission@sec+0x78 / genFlags@sec+0x79`
+  (`autoRun` = bit `0x10`; the `sec+0x76` interval is in-game A/B verified).
 - **Body = four opcode sub-streams** (offset table at section-start `+0x80`):
   **sec1** generator updaters · **sec2** particle initializers (run once per particle)
   · **sec3** particle updaters (run every tick) · **sec4** expiration handlers.
@@ -343,9 +354,11 @@ To add a brand-new spell visual, you touch both the **client DATs** and the **se
    `SpellAnimationTable[spellId]` resolves to your DAT.
 
 **What cexi can do today:** inspect/dump/edit/copy/export `0x05` effects (`cexi fx`),
-round-trip `0x20` textures (`cexi tex`), and transplant effects with all deps across
-DATs. **Not yet:** authoring `0x07` routines from scratch, FileTable registration, or
-mesh re-encode — those are the next tooling targets.
+round-trip `0x20` textures (`cexi tex`), transplant effects with all deps across
+DATs, and resolve **spell → animation DAT** (`cexi.spell` / `spell_catalog` /
+`resolve_spell_dat_rel` — see [spells.md](spells.md)). **Not yet:** authoring `0x07`
+routines from scratch, FileTable registration, or mesh re-encode — those are the next
+tooling targets.
 
 ---
 

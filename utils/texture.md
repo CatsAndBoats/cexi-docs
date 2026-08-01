@@ -3,8 +3,8 @@
 Standalone DDS/PNG texture conversion helpers.
 
 For the common UI editing workflow, you may not need to call these directly.
-`uv run cexi ui simple-extract` / `uv run cexi ui sx` run extract + DDS->PNG, and
-`uv run cexi ui simple-import` / `uv run cexi ui si` run PNG->DDS + import using
+`uv run cexi ui tex sx` runs export + DDS->PNG, and
+`uv run cexi ui tex si` runs PNG->DDS + import using
 the DAT-derived `exports/ui/...` folder automatically.
 
 ---

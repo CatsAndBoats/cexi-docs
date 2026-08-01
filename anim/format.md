@@ -33,13 +33,21 @@ offset  size  description
 0x0C    4     0x00000000 (always zero)
 ```
 
-**Size field notes (bytes 4–7):** The low byte is always `0xAB` across all animation blocks:
+**Size field (bytes 4–7) — packed section meta**, same layout as mesh/zone sections:
 ```
-idl0:  0x0002A5AB  block = 21,680 bytes
-wlk0:  0x0001EEAB  
-run0:  0x00019BAB
+type = meta & 0x7F                         # low 7 bits; animation = 0x2B
+size = ((meta >> 7) & 0x7FFFF) * 0x10      # bits 7–25: 19-bit size in 16-byte units
+# bit 26 = is_shadow (not part of size)
 ```
-Encoding is non-obvious. **Safe approach: duplicate an existing block header and patch only the animation fields.**
+Example:
+```
+idl0:  meta 0x0002A5AB  →  type 0x2B (0xAB & 0x7F), size ((0x2A5AB >> 7) & 0x7FFFF)*0x10 = 21,680
+wlk0:  meta 0x0001EEAB
+run0:  meta 0x00019BAB
+```
+`0xAB` is not a mystery constant: type `0x2B` plus the low size bits often produce that
+low byte. Writers must use `encode_section_meta` in `src/cexi/common/xi_section.py`
+(19-bit size mask `0x7FFFF` — a 20-bit write would spill into `is_shadow`).
 
 ---
 
@@ -99,7 +107,10 @@ byte_pos = keyFrameDataOffset + offset * 4 + frame * 4
 value = struct.unpack_from('<f', data, byte_pos)[0]
 ```
 
-**Skip rule:** If **any** rotation offset for a bone is negative → skip that entire bone's rotation. The root bone (jointIdx=0) has all rot_offsets = INT_MIN.
+**Skip rule:** If **any** offset in a channel group (rotation **or** translation **or**
+scale) is negative, that whole group is dropped; if any of the three groups is absent,
+the **entire bone track is skipped**. The root bone (jointIdx=0) has all rot_offsets =
+INT_MIN and is therefore dropped as a track.
 
 The float data region and entries region overlap in address space (entries ARE inside the addressable float space). In practice, channel float data is placed after all entries.
 

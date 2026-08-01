@@ -21,6 +21,8 @@ external tools). ATRAC3 (~36% of music) is routed to `vgmstream-cli` when presen
 | `uv run cexi audio decode FILE…` | Decode explicit `.bgw`/`.spw` paths to `.wav` |
 | `uv run cexi audio info FILE` | Dump a file's parsed header |
 | `uv run cexi audio refs <dat>` | List the sounds a DAT references → JSON ([refs.md](refs.md)) |
+| `uv run cexi audio import FILE` | Encode audio → custom **`.spw` only** (sfx; music encode is library-only, not CLI) |
+| `uv run cexi audio install FILE` | Convert and install a sound as **`.spw`** under `win/se/seNNN/seNNNNNN.spw` |
 | `uv run cexi batch audio_music` | Decode **all** music + write `catalog.json` |
 | `uv run cexi batch audio_sfx` | Decode **all** sound effects + write `catalog.json` |
 
@@ -38,19 +40,19 @@ uv run cexi audio decode "…/sound/win/se/se002/se002060.spw" --out out/
 
 ## List with names
 
-`list` reads each header and annotates it. Music gets titles from `MusicInfo.xml`;
-sound effects get their folder **category** (the game's own grouping):
+`json` reads each header and annotates it, emitting **JSON** (one object per file:
+id, format, channels, sample_rate, looped, duration_sec, label). Music gets titles
+from `MusicInfo.xml`; sound effects get their folder **category** (the game's own
+grouping). `duration_sec` is `null` for ATRAC3 (its block fields don't map to a
+frame count).
 
+```bash
+uv run cexi audio json --type music music10 --root sound
+uv run cexi audio json --type sfx se019 --root sound
 ```
-$ uv run cexi audio json --type music music10 --root sound
-ROOT    FILE              FMT    CH   RATE    DUR LOOP NAME / CATEGORY
-sound   music104.bgw      ADPCM   2  44100   2:19 yes  Yughott Grotto
-sound   music105.bgw      ADPCM   2  44100   2:20 yes  Mhaura
-sound   music106.bgw      ADPCM   2  44100   3:18 -    Voyager (Ferry Music)
 
-$ uv run cexi audio json --type sfx se019 --root sound
-sound   se019001.spw      ADPCM   1  48000   0:03 -    Skillchain Sounds
-```
+(The fixed-width `ROOT FILE FMT …` table an older revision showed here is the
+output of the hidden legacy `audio music list` command, not `json`.)
 
 `--root sound` limits to one sound root (default: all 7).
 
@@ -64,7 +66,10 @@ uv run cexi batch audio_sfx -w 8 --skip-existing --filter se002
 
 - **Parallel** by default (`-w`, scaled to your CPU) — important for the ~12k sfx.
 - **Resumable**: `--skip-existing` skips files already decoded.
-- Output mirrors the source tree under a per-root subfolder so nothing collides.
+- **Batch** output mirrors the source tree under a per-root subfolder so nothing
+  collides. (`audio export` is different: it names each WAV after the sanitised
+  track title, flat in the output dir — pass `--numbered` to mirror the source
+  tree instead.)
 - ATRAC3 routes through `vgmstream-cli`; `--native-only` skips it, `--vgmstream
   PATH` points at a specific binary.
 

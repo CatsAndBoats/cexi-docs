@@ -19,6 +19,11 @@ For the full evidence-based map see [dats.md](dats.md); for what loads at boot s
 > - `[conditional]` = not in this trace but loads in other situations (other language, the
 >   char-select screen, a different window theme, a different zone). Not dead — just not hit here.
 > A trace is one session, so "not loaded" ≠ "never loaded" unless marked `[legacy]`.
+>
+> ⚠️ **Environment caveat:** the traced install is a **CatsEyeXI client with Ashita/XIPivot
+> overlays**, not clean retail. Load-order and 0-reads observations are environment-specific
+> and may not hold on a clean retail install (overlay DATs can satisfy reads the trace
+> attributes elsewhere, or shadow files retail would read).
 
 ### Load status at a glance (indexed files)
 
@@ -70,8 +75,8 @@ For the full evidence-based map see [dats.md](dats.md); for what loads at boot s
 
 ## UI textures & window skins
 
-> **All editable** with the `cexi ui` flow: `uv run cexi ui sx "ROM\..\..DAT"` (extract→PNG),
-> edit the PNGs, `uv run cexi ui si "ROM\..\..DAT"` (rebuild→import). See [QUICKY.md](QUICKY.md).
+> **All editable** with the `cexi ui tex` flow: `uv run cexi ui tex sx "ROM\..\..DAT"` (export→PNG),
+> edit the PNGs, `uv run cexi ui tex si "ROM\..\..DAT"` (rebuild→import). See [QUICKY.md](QUICKY.md).
 
 > Texture/section names below are the per-file export folder names under `exports/ui/<dat>/`.
 
@@ -116,7 +121,7 @@ For the full evidence-based map see [dats.md](dats.md); for what loads at boot s
   These are the files you edit to re-skin windows (e.g. `ROM/0/15.DAT` = design 2).
 * Each = 4 DXT1+alpha tiles (`newtex` 128×128 fill + `corner`/`hfr1`/`vfr1` 32×32 borders),
   9-sliced to any window size.
-* Edit with `ui sx`/`si` (extract is `cexi ui extract`).
+* Edit with `ui tex sx`/`si` (export is `cexi ui tex export`).
 * **Only the active theme loads** — the trace read `0/14` (design 1) ×6 and none of `0/15–21`.
   To preview an edit, set that design in-game config (or edit whichever design is active).
 
@@ -137,7 +142,7 @@ For the full evidence-based map see [dats.md](dats.md); for what loads at boot s
 * `menu` — vanilla main menu structure + UI atlas (same textures as the live `119/51`).
 * Holds the legacy `mis2`/`missionm` mission-menu **layout**; modern mission *text* is in
   `ROM/118/115.DAT` and the menu family is `ROM/118/11x`, so this is effectively dead.
-* `cexi ui menu-pos` can parse it, but edits don't reach the live client (0 reads).
+* `cexi ui layout menu-pos` can parse it, but edits don't reach the live client (0 reads).
 
 ### ROM/97/*.DAT — menu label strings (`XISTRING`, plain ASCII)
 * `97/41` (143) **[legacy — not loaded]** — general UI labels; **vanilla mission category names**

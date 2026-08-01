@@ -44,6 +44,12 @@ Layout (`event-message.ts`):
 
 - The **offset table** runs until the first entry's target (`startOffset`); each entry
   points at a string; the next entry (or end-of-buffer) bounds its length.
+- *Convention byte-verified 2026-08 (S. San d'Oria, `ROM/25/39.DAT`): demasked
+  `offsets[0] = 0x1076C`, and the first string ("The San d'Oria resid…") begins at exactly
+  `offsets[0] + 4`; the 4 bytes at `offsets[0]` itself are the table's final entry. A
+  competing "offsets are file-absolute" reading (2026-08 external crosscheck) would start
+  record 0 with those 4 binary bytes and lose the last string — stored = absolute − 4 is
+  what the bytes say.*
 - **Deobfuscation**: when `b[3] == 0x10`, XOR every payload byte with `0x80` before
   reading — a trivial scramble, not encryption.
 - Strings are **indexed by position** — the bytecode's "print message id" is an index

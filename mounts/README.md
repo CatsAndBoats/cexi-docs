@@ -42,7 +42,7 @@ name(EN/JP), desc(EN/JP)}, server grant }`.
 | `cexi mount export <id>` | Dump one mount's full record (EN/JP name + help, EN/JP key-item name + desc, file-id, DAT) → JSON. |
 | `cexi mount import <id> --dat <file>` | Override an **existing** mount's model (swap the DAT at `0x019131+id`); `--name`/`--name-jp` to also retitle. Guarded on retail ids 0–38 without `--force`. |
 | `cexi mount delete <id>` | Remove a custom mount: zero the FTABLE entry, clear the name/help/key-item strings, emit server cleanup. Refuses retail ids 0–38 without `--force`. |
-| `cexi dats prepare/plan/build` | Create a **new** mount as a reproducible package action: register the model, write EN/JP names, place the key item inside Key Items > Mounts, and emit the server bundle. |
+| `cexi dats prepare` + `build` | Create a **new** mount as a reproducible package action: register the model, write EN/JP names, place the key item inside Key Items > Mounts, and emit the server bundle. Preview with `build --dry-run`. |
 
 **`--dat` resolution & placement:** `--dat` is tried as-given (absolute/CWD), then as a
 ROM-relative path under `FFXI_DIR` (e.g. `ROM10/10/1.DAT`), then the output mirror. If the
@@ -50,8 +50,8 @@ DAT already lives in the ROM tree it's registered **in place** (no copy); an ext
 copied to `ROM10/100/<id>.DAT`. Injecting onto an occupied **custom** id (39+) overwrites it;
 retail ids 0–38 need `--force`. `--dry-run` previews without writing.
 
-Server-side changes are packaged through `cexi dats prepare/plan/build`, which copies
-the client files and server resources into the release layout.
+Server-side changes are packaged through `cexi dats prepare` + `cexi dats build`,
+which copies the client files and server resources into the release layout.
 
 Current project custom mount, if it needs to be rebuilt from a manifest entry:
 

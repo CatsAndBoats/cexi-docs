@@ -117,7 +117,12 @@ Sources, all from the game's own data:
   motion tables (`entity.anim.xi_motion_tables`);
 - **face + each worn slot mesh + textures** → `resolve_gear_dat(race, slot, id)` (model id `0`
   = the naked base part, so an empty slot still shows skin); the user may pass a DAT path
-  instead of an id per slot;
+  instead of an id per slot. The wizard's **face picker** lists faces by code (`F8A` — "F" =
+  *Face*) or NPC-face name (`Maximilian`, `Fomor`) rather than a raw byte, from the static
+  table in `entity/xi_pc_faces.py` (transcribed once from AltanaViewer's lists — reference
+  only, not read at runtime). Tarutaru is a single model whose "gender" is only the face, so
+  it has no gender prompt and its picker combines the male- and female-looking faces
+  (`Male 1A` / `Female 1A`, computed from the gear tables);
 - **weapon mesh** → the user's weapon DAT (its `0x2A` rigs to the shared weapon joint).
 
 Every child id is re-stamped unique (directories key children by id); textures dedupe by their
@@ -131,6 +136,12 @@ Info `0x45` byte 3 — read and recorded at bake time) are a planned follow-up.
 cexi dats new         # → NPC (costume: race + gear + weapons) → bakes dats/custom/<name>.dat,
                       #   then places it at a custom entity model id like any entity action
 ```
+
+The wizard's first question is **"Do you have a Look String?"** — paste a 20-byte look
+(40 hex chars) and it `parse_look`s it and auto-fills race, face and every worn slot (resolving
+each slot's model id → DAT via the gear tables, using the look's own race so a Tarutaru female
+look picks the female face), skipping straight to the bake. Fixed-model looks (a monster/object)
+are rejected — those aren't costumes. Answer **No** to fill everything in by hand.
 
 ## Related
 

@@ -1,19 +1,25 @@
 # `cexi tex` — DAT textures (extract / repaint / reimport)
 
 Decode `0x20` texture sections to PNG, edit them, and re-encode back into the DAT.
-Works on **any** DAT (zone, entity, …). Three commands:
+Works on **any** DAT (zone, entity, …). Preferred commands:
 
 ```
-cexi tex list   <dat>                 # list textures: fourcc, name, WxH, size
+cexi tex json   <dat>                 # dump textures as JSON (fourcc, name, WxH, size)
 cexi tex export <dat> [name...]       # decode -> PNG (exports/tex/<rom>/)
 cexi tex import <dat> [png...]        # re-encode edited PNG(s) back in (matched by name)
 ```
 
-`<dat>` is a path or ROM spec like `ROM/1/41`. Implemented in the `src/cexi/tex/` package (`core.py` shared; `xi_list.py` / `xi_export.py` / `xi_import.py` per command).
+`cexi tex list` still exists but is **hidden** (same payload as `json` without the
+wrapper). Prefer `tex json`.
+
+`<dat>` is a path or ROM spec like `ROM/1/41`. Implemented in the `src/cexi/tex/`
+package (`xi_core.py` shared; `xi_list.py` / `xi_export.py` / `xi_import.py` per
+command).
 
 ## Workflow (e.g. repaint the fountain splash)
 
 ```sh
+uv run cexi tex json ROM/1/41               # inventory
 uv run cexi tex export ROM/1/41 funsui      # -> exports/tex/rom/1/41/funsui_sib1.png  (+ abuk/umi02/tare)
 # …edit funsui_sib1.png in any image editor (keep its size/name)…
 uv run cexi tex import ROM/1/41              # re-imports every PNG in that folder, by name
@@ -21,7 +27,7 @@ uv run cexi tex import ROM/1/41              # re-imports every PNG in that fold
 
 ## How it works
 
-- Textures are `0x20` sections. `tex list`/`export` decode them (DXT or palettized)
+- Textures are `0x20` sections. `tex json`/`export` decode them (DXT or palettized)
   to RGBA PNG via the same decoder used by zone/entity export.
 - The export path is **auto-derived from the DAT's ROM path** (`exports/tex/rom/1/41/`),
   so it's the same regardless of DAT type — no zone-vs-entity confusion.

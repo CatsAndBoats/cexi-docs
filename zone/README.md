@@ -13,7 +13,7 @@ a zone DAT (`ROM/<dir>/<dat>.DAT`). Mirrors the `cexi zone` command group.
 | `zone import-json` | [import-json.md](import-json.md) | Apply a JSON change-set from the web level editor |
 | `gui zone` | — | Serve the browser-based [web level editor](../../web/leveleditor/README.md) |
 | `zone reset` | [reset.md](reset.md) | Restore a zone DAT to pristine (undo all edits) |
-| `zone new` | — | Create a blank zone from the pre-baked template (floor + collision + navmesh); `--sky <DAT>` to splice atmosphere |
+| `zone new` | [templates.md](templates.md) | Create a custom zone (**requires** `--template <id>`; see [templates.md](templates.md)); optional `--sky <DAT>` to splice atmosphere |
 | `zone delete` | — | Remove a custom zone (ID ≥ 400) — deletes DAT, zeros FTABLE10, prints server SQL |
 | `zone build-from-manifest` | — | Assemble a custom zone from a Godot designer `build_manifest.json`; reads biome + size from the manifest |
 | `zone json --fx` | [../fx/README.md](../fx/README.md) | Inspect the zone's `0x05` VFX generators as JSON |
@@ -38,7 +38,7 @@ compatibility alias.
 - **[collision.md](collision.md)** — player-collision mesh (MZB): export, edit, and append new blockers.
 - **[navmesh.md](navmesh.md)** — server navmesh (`.nav`): bake from collision via the bundled
   native Recast/Detour lib, install, and validate. Built lib lives in
-  [../../native/cexi-navmesh/](../../native/cexi-navmesh/README.md).
+  [../../misc/tools/cexi-navmesh/](../../misc/tools/cexi-navmesh/README.md).
 
 ## Typical workflows
 

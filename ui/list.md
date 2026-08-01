@@ -1,4 +1,4 @@
-# cexi ui list
+# cexi ui tex list
 
 List all DAT files that contain UI textures (lobb / menu / win0 / sel_ format).
 
@@ -10,7 +10,7 @@ lookups. Falls back to a live FTABLE scan if the research file is absent.
 ## Usage
 
 ```
-uv run cexi ui list [--magic AAAA] [--json]
+uv run cexi ui tex list [--magic AAAA] [--json]
 ```
 
 | Option | Description |
@@ -27,16 +27,16 @@ Without `--magic`, all known UI types are shown:
 
 ```bash
 # list all UI DATs
-uv run cexi ui list
+uv run cexi ui tex list
 
-# find only menu and lobb containers (the ones ui export/import work with)
-uv run cexi ui list --magic menu --magic lobb
+# find only menu and lobb containers (the ones ui tex export/import work with)
+uv run cexi ui tex list --magic menu --magic lobb
 
 # find all window skin DATs (ROM/0/14-21)
-uv run cexi ui list --magic win0
+uv run cexi ui tex list --magic win0
 
 # export to JSON
-uv run cexi ui list --json
+uv run cexi ui tex list --json
 ```
 
 ---
@@ -72,13 +72,13 @@ uv run cexi ui list --json
 | `titl` | titl | Title screen DAT |
 | `mgc_` | mgc_ container | Magic effect UI icons |
 
-`cexi ui export` and `cexi ui import` work with **`menu`** and **`lobb`** format DATs.
-The `win0` DATs also work with `ui export/import` via the `--all-themes` flag.
+`cexi ui tex export` and `cexi ui tex import` work with **`menu`** and **`lobb`** format DATs.
+The `win0` DATs also work with `ui tex sx`/`si` via the `--all-themes` flag on `si`.
 
 ---
 
 ## Related commands
 
-- **`cexi ui export`** — extract DXT textures from a UI DAT as DDS files
-- **`cexi ui import`** — re-import edited DDS/PNG files back into a UI DAT
-- **`cexi ftable list --magic lobb`** — same filter via live FTABLE scan
+- **`cexi ui tex export`** — extract DXT textures from a UI DAT as DDS files
+- **`cexi ui tex import`** — re-import edited DDS/PNG files back into a UI DAT
+- **`cexi ftable list --header lobb`** — same filter via live FTABLE scan

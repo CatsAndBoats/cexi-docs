@@ -409,11 +409,12 @@ Or use `cexi model json` to browse registered models.
 | 3000–3499 | `modelid + 96907` |
 | 3500+ | `modelid + 98239` |
 
-Custom models use IDs 15000–20000. Requires `cexi ftable expand` first —
-this expands **all** base FTABLE/VTABLE files (not just ROM10) to 118,240
-entries. The client merges all tables by index, so if the base FTABLE only
-has 109,701 entries, file IDs above that are invisible even if ROM10's
-FTABLE10 has them registered.
+Custom models use IDs 15000–30000 (default `MAX_ENTITY_MODELID`; override with
+`CEXI_MAX_ENTITY_MODELID`). Requires `cexi ftable expand` first — this expands
+**all** base FTABLE/VTABLE files (not just ROM10) to 128,240 entries at the
+default ceiling. Tables must stay the same size across roots (volume-direct
+lookup + overlay shadow); if the base FTABLE is shorter than the overlay,
+high file IDs are invisible even when FTABLE10 has them registered.
 
 **Important:** Never restore base FTABLEs to their original size after
 expanding. Zone injection works without expansion (zone file IDs are below

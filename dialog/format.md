@@ -33,7 +33,7 @@ text — see [../dat_ror1.md](../dat_ror1.md).
 
 **Offset table.** Starting at offset 4, each entry is a `u32` little-endian
 value; the real position is `value + 4`. The **first** entry doubles as the
-end-of-table marker (`startOffset`), so the entry count is `startOffset / 4 - 1`.
+end-of-table marker (`startOffset`), so the entry count is `startOffset / 4`.
 String *N* runs from `offset[N]` to `offset[N+1]`, and is NUL-terminated (decode
 stops at the first `0x00`; any bytes after it are alignment padding).
 

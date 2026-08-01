@@ -10,7 +10,7 @@ Usage:
     dump_event.py --zone 184 --event 22            # resolve zone DAT via FTABLE/VTABLE
     dump_event.py <file.DAT>                       # list every block + event
     dump_event.py <file.DAT> --event 0x0A          # dump event id 0x0A (all blocks)
-    dump_event.py <file.DAT> --event 10 --actor 0x7FFFFFFF
+    dump_event.py <file.DAT> --event 10 --actor 0x7FFFFFF0
     dump_event.py <file.DAT> --block 0             # dump every event in block 0
     dump_event.py <file.DAT> --event 0x0A --bytes  # include raw hex per instruction
     dump_event.py --zone 184 --event 22 --md       # write a markdown table file
@@ -28,7 +28,9 @@ import re
 import struct
 import sys
 
-ZONE_EVENT_ACTOR = 0x7FFFFFFF
+# Byte-verified 2026-08: retail zone/master blocks carry 0x7FFFFFF0 at block
+# level (253/253 zone event DATs); 0x7FFFFFFF never occurs as a block actor id.
+ZONE_EVENT_ACTOR = 0x7FFFFFF0
 WILDCARD_EVENT_ID = 0xFFFE
 
 # --- opcode sizing (ported verbatim from EventDisassembler.cpp) ----------------
@@ -429,7 +431,12 @@ def find_game_data_root(start):
 
 
 def _load_combined_table(root, base):
-    """OR-combine base.DAT + ROM2/base2.DAT .. ROM9/base9.DAT, like FileTableManager."""
+    """OR-combine base.DAT + ROM2/base2.DAT .. ROM9/base9.DAT, like FileTableManager.
+
+    NB: this mirrors xim's combine model. External byte evidence (2026-06-24, ~33
+    multi-volume file-ids) says the REAL client is volume-direct: the VTABLE byte
+    names the ROM volume and update entries shadow the base — for registered ids
+    both models resolve the same path, which is why this tool still works."""
     combined = bytearray()
     for i in range(1, 10):
         prefix = "" if i == 1 else f"ROM{i}"

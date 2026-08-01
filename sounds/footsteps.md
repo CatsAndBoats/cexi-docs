@@ -22,7 +22,9 @@ decoder (`src/cexi/zone/xi_collision.py`).
 - When a foot lands, the engine reads the terrain type off the floor triangle the
   actor is standing on and builds a 4-character `DatId` `0<terrain><move><shake>`,
   which it looks up in the zone DAT's **`fses`** sub-directory to get a sound
-  pointer; that pointer resolves to a shared OGG under `sound/win/se/`.
+  pointer; that pointer resolves to a shared sound file under `sound/win/se/`
+  (retail ships `.spw` — the `.ogg` paths quoted from xim below are that browser
+  port's pre-converted asset convention).
 - The `<move>`/`<shake>` digits come from the actor **model's** `info` section
   (for a PC, from the equipped **feet** item) — not from the zone. So footwear,
   not the zone, varies the timbre/pitch of the step.
@@ -113,6 +115,9 @@ The `DatId` is a 4-character FourCC built from four fields:
 > index `10` (`Unk0xA`) would expand to the two characters `"10"` and produce a
 > malformed 5-character id — the scheme only cleanly addresses terrain indices
 > 0..9. (Contrast the *visual*-effect id below, which uses a hex nibble.)
+> cexi's `xi_footsteps.py` formats the index as a **hex** nibble (`f"0{idx:x}"`) —
+> identical for 0-9, diverging only at index 10 (`0a` vs `010`, the malformed
+> case above); which of the two the real client does is unresolved.
 
 `soundDir` is the zone DAT's `fses` directory (passed in from `ZoneDrawer`, §4).
 The lookup returns a `SoundPointerResource`, **not** the audio itself — the
@@ -123,6 +128,11 @@ pointer's `folderId`/`fileId` resolve to a shared OGG:
 ```
 ([`AudioManager.kt:216-218`](../../thirdparty/xim/src/jsMain/kotlin/xim/poc/audio/AudioManager.kt),
 via `toSoundFileName` at [`AudioManager.kt:147`](../../thirdparty/xim/src/jsMain/kotlin/xim/poc/audio/AudioManager.kt))
+
+> **Note.** That `.ogg` extension (and the unpadded `se${folderId}` path form) is
+> the **xim browser port's** pre-converted asset convention, not the on-disk
+> client format — **retail ships `.spw`**, which cexi resolves as
+> `se{folder:03d}/se{file:06d}.spw` (see [audio/format.md](../audio/format.md)).
 
 So the `fses` table maps **terrain+footwear → a row in the global `sound/win/se`
 pool**; the actual waveform lives in that global pool, not in the zone.
@@ -245,7 +255,7 @@ Tracing where each footstep resource is fetched:
 | Footstep **sound** ptr  | `0<t><m><s>`    | `zoneDat.getSubDirectory(fses)`             | **zone-local** |
 | Footstep **VFX**        | `0<hex t>00`    | `zoneDat.fses → fefs`                        | **zone-local** |
 | Footprint **decal**     | `fmrk`          | `systemEffects` (global, recursive)         | **global**     |
-| Actual **OGG audio**    | —               | `sound/win/se/seXXX/seYYY.ogg`              | **global**     |
+| Actual **audio file**   | —               | `sound/win/se/seXXX/seYYY.ogg` (xim port — retail ships `.spw`) | **global**     |
 
 Citations: sound dir `zoneDat.getSubDirectory(DatId.fses)`
 ([`ZoneDrawer.kt:200`](../../thirdparty/xim/src/jsMain/kotlin/xim/poc/ZoneDrawer.kt));

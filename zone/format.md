@@ -32,9 +32,10 @@ for the table's own first 4 bytes: **table1** starts `E2 E5 06 A9`, **table2**
 - decrypt order = pass1 then pass2 (each self-inverse).
 
 **ZoneDef (`0x1C`)** — different: variable-length XOR-`0xFF` stream over the body
-from `ds+8` (`xorLength = ((key>>4)&7)+16`; apply when `key&1` and room remains;
-`key += ++counter`; `mode <= 0x1A` = unencrypted), then each object's 16-char name
-is unmasked with `0x55` at `ds+0x20 + i*0x64`.
+from `ds+8`. Key seed: `key = table1[(keyNodeData>>24) ^ 0xFF]` (mesh path uses
+`^ 0xF0` instead). Then `xorLength = ((key>>4)&7)+16`; apply when `key&1` and room
+remains; `key += ++counter`; `mode <= 0x1A` = unencrypted. After the stream, each
+object's 16-char name is unmasked with `0x55` at `ds+0x20 + i*0x64`.
 
 ## ZoneMesh section (`0x2E`)
 
@@ -148,13 +149,20 @@ Three further sub-sections inside `0x1C` decide whether an object actually draws
   `object.cullingTableLink@0x48` points back to its table (or 0).
 - **Collision transforms**: a contiguous `0xC0`-byte array indexed **1:1 by object
   index** (`[transformsOff, pairsOff)` in the collision section). Each = world matrix
-  `@0x00` (16 f32), inverse `@0x40`, mesh-local cull bounds + culling-group offset
-  `@0xA8` in `@0x80…`. The collision header's `indexCount@+0x18` mirrors `nodeCount`, so
-  growing the object array means growing this array too.
+  `@0x00` (16 f32), inverse `@0x40`, then the `@0x80…` tail: a **3×3 float matrix**
+  (36 bytes @`0x80` — cexi writes identity there and gets correct hit normals in-game,
+  so a normal/rotation matrix is the leading interpretation, but the field is otherwise
+  unconfirmed; an external corpus survey reads it as "3 × vec3, purpose unresolved"),
+  the culling-group offset `@0xA8`, and the world-space Y cull AABB `@0xB4`/`@0xB8`
+  (see [collision.md](collision.md) — same record, same tail). The collision header's
+  `indexCount@+0x18` mirrors `nodeCount`, so growing the object array means growing
+  this array too.
 
 ## Re-import (`cexi zone import`)
 
-Reverse of export, v1 = **placement edits only** (`src/cexi/zone/xi_import.py`).
+Reverse of export (`src/cexi/zone/xi_import.py`): placement write-back **and**
+automatic mesh-merge into existing `0x2E` sections when GLB geometry grows. See
+[import.md](import.md).
 
 - **Re-encryption** (`xi_decrypt.py`): both ciphers are built from self-inverse ops,
   so re-encrypt = the same passes in reverse order. `reencrypt_zone_mesh` =
@@ -169,18 +177,22 @@ Reverse of export, v1 = **placement edits only** (`src/cexi/zone/xi_import.py`).
   TRS decomposition is ambiguous for negative-scale (mirrored) records — it picks
   an equivalent factorization, so verify by world matrix, not raw bytes.
 - **Coordinate recovery** is *not* a fixed flip. Export parents each placement
-  (raw TRS as its local matrix) under an `ffxi_root_correction` node (180°-X).
+  (raw TRS as its local matrix) under an `ffxi_root_correction` node (180°-X
+  composed with scale `[-1,1,-1]`, net `(x,y,z) → (-x,-y,z)` = `diag(-1,-1,1)`).
   Blender preserves each node's local TRS through FBX but re-expresses the
   correction node itself, so we recover each node's transform **relative to the
   actual correction node** (`inv(C)·W`), exact for its descendants. With no
-  correction node (flattened model) we strip the hardcoded `diag(1,-1,-1)`.
+  correction node (flattened model) we strip the hardcoded `diag(-1,-1,1)`.
+- **Mesh-merge**: when a GLB mesh's triangle count differs from the pristine `0x2E`
+  by more than the grow threshold, geometry is re-serialized into that section
+  (grows the DAT). Details in [import.md](import.md).
 - **Fidelity**: the GLB export round-trips every object loss-lessly. Blender's
   FBX exporter corrupts some mirrored (negative-determinant) objects by
   re-parenting them to the scene root — those are detected and skipped (their DAT
   record keeps its correct base value). Edit mirrored objects via GLB.
-- Object count/size unchanged ⇒ no section resize, internal offsets
-  (`collisionMeshOff`/`spaceTreeOff`/`cullTablesOff`/`pointLightOff`) stay valid.
-- Adding objects (`cexi object import`) grows the object array and rewrites the
-  space-tree, culling, and collision-transform tables — see [object/import.md](../object/import.md).
-- Future: geometry replace into an existing section (re-serialize `0x2E`, grow section,
-  fix `section1Off` + counts) without going through mesh-merge.
+- Object count/size unchanged for placement-only edits ⇒ no section resize,
+  internal offsets (`collisionMeshOff`/`spaceTreeOff`/`cullTablesOff`/
+  `pointLightOff`) stay valid.
+- Adding brand-new objects (`cexi object import`) grows the object array and
+  rewrites the space-tree, culling, and collision-transform tables — see
+  [object/import.md](../object/import.md).

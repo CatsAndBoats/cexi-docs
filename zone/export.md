@@ -92,7 +92,8 @@ combined export). With `--fbx`, Blender is spawned once per object, so a full zo
 - Needs `FFXiMain.dll` at `FFXI_DIR` (the decryption key tables are read from it).
 - Needs Blender (`BLENDER_PATH`) for the `--fbx` step; omit `--fbx` to skip it.
 - LOD: objects with `_l`/`_m`/`_h` ids resolve to the highest-detail mesh.
-- Vertex colours (FFXI baked lighting) are dropped so textures read cleanly.
+- Vertex colours (FFXI baked lighting) are written as `COLOR_0`, with the
+  FFXI ×2 modulate folded in.
 
 Re-importing an edited GLB back into the DAT is done via `cexi zone import` (placements, mesh-merge) and `cexi object import` (individual objects). See [import.md](import.md).
 
